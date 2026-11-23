@@ -129,8 +129,9 @@ I'm doing", which is easy to spot in review.
 
 > **A patch.** rust-js at our pinned commit declared a newtype as `any`,
 > which would let TypeScript pass anything. We patched the submodule
-> (`patches/0001-sealed-tuple-structs-declared-opaque.patch`) and opened an
-> issue upstream. See [PATCHES.md](../../PATCHES.md).
+> (`patches/0001-sealed-tuple-structs-declared-opaque.patch`) and opened
+> [rust-js#2356](https://github.com/rust-js-lang/rust-js/issues/2356)
+> upstream. See [PATCHES.md](../../PATCHES.md).
 
 ## Side by side
 
