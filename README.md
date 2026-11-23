@@ -42,6 +42,9 @@ inputs, so you can see where they agree and where they don't.
 11. [`z.record` is a `HashMap`](chapters/11-record-is-a-map/README.md):
    keys that arrive with the data, a JavaScript `Map` and `Set` in
    rust-js, and `get` that makes you say what "not there" means.
+12. [`.superRefine` is `try_from` of the whole](chapters/12-refine-the-whole/README.md):
+   read a form, then make a value of it only if every rule holds, each
+   broken one listed, as zod lists them.
 
 ## Run it
 
