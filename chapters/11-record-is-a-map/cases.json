@@ -1,0 +1,10 @@
+[
+  {"text":"{\"counts\":{\"apple\":3,\"pear\":12,\"fig\":0},\"tags\":[\"organic\",\"local\"]}","why":"a shop","zod":null,"rust":null,"summary":"15 in all, low: [apple, fig], apples: 3, organic: true"},
+  {"text":"{\"counts\":{},\"tags\":[]}","why":"an empty shop","zod":null,"rust":null,"summary":"0 in all, low: [], apples: 0, organic: false"},
+  {"text":"{\"counts\":{\"apple\":3},\"tags\":[\"organic\",\"organic\"]}","why":"a tag twice: a set keeps one","zod":null,"rust":null,"summary":"3 in all, low: [apple], apples: 3, organic: true"},
+  {"text":"{\"counts\":{\"apple\":1,\"apple\":7},\"tags\":[]}","why":"a key twice: the last one counts","zod":null,"rust":null,"summary":"7 in all, low: [], apples: 7, organic: false"},
+  {"text":"{\"counts\":{\"apple\":-1},\"tags\":[]}","why":"a count below 0","zod":["counts.apple: Too small: expected number to be >=0"],"rust":"invalid value: integer `-1`, expected u32 at line 1 column 21","summary":null},
+  {"text":"{\"counts\":{\"apple\":2.5},\"tags\":[]}","why":"a count that isn't whole","zod":["counts.apple: Invalid input: expected int, received number"],"rust":"invalid type: floating point `2.5`, expected u32 at line 1 column 22","summary":null},
+  {"text":"{\"counts\":[[\"apple\",3]],\"tags\":[]}","why":"counts as a list of pairs","zod":["counts: Invalid input: expected record, received array"],"rust":"invalid type: sequence, expected a map at line 1 column 10","summary":null},
+  {"text":"{\"counts\":{\"apple\":3}}","why":"no tags","zod":["tags: Invalid input: expected array, received undefined"],"rust":"missing field `tags` at line 1 column 22","summary":null}
+]

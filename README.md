@@ -39,6 +39,9 @@ inputs, so you can see where they agree and where they don't.
 10. [`.pick`, `.omit` and `.partial` are structs of their own](chapters/10-pick-is-a-struct/README.md):
    each shape written out, `deny_unknown_fields` for `.strict()`, and the
    compiler holding the code between them to every field.
+11. [`z.record` is a `HashMap`](chapters/11-record-is-a-map/README.md):
+   keys that arrive with the data, a JavaScript `Map` and `Set` in
+   rust-js, and `get` that makes you say what "not there" means.
 
 ## Run it
 
