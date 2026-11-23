@@ -127,11 +127,14 @@ Compare with zod's brand: there, one `as` was enough. Here a single `as` is
 an error too. You have to say `as unknown as`, TypeScript's "I know what
 I'm doing", which is easy to spot in review.
 
-> **A patch.** rust-js at our pinned commit declared a newtype as `any`,
-> which would let TypeScript pass anything. We patched the submodule
-> (`patches/0001-sealed-tuple-structs-declared-opaque.patch`) and opened
-> [rust-js#2356](https://github.com/rust-js-lang/rust-js/issues/2356)
-> upstream. See [PATCHES.md](../../PATCHES.md).
+> **Found here, fixed upstream.** When this chapter was written, rust-js
+> declared a newtype as `any`, which let TypeScript pass anything. We
+> patched our copy, filed
+> [rust-js#2356](https://github.com/rust-js-lang/rust-js/issues/2356), and
+> the fix landed in rust-js as
+> [ADR 1187](https://github.com/rust-js-lang/rust-js/blob/main/docs/decisions/1187-a-tuple-struct-no-caller-can-make-is-declared-opaque.md)
+> ([#2359](https://github.com/rust-js-lang/rust-js/pull/2359)). See
+> [PATCHES.md](../../PATCHES.md).
 
 ## Side by side
 
