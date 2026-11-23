@@ -1,0 +1,7 @@
+[
+  {"text":"{\"id\":7,\"status\":\"open\",\"items\":[{\"sku\":\"A1\",\"qty\":2},{\"sku\":\"B2\",\"qty\":1}],\"note\":\"leave at the door\"}","why":"an order","zod":null,"rust":null,"label":"#7 (open, 3 things): leave at the door"},
+  {"text":"{\"id\":8,\"status\":\"shipped\",\"items\":[],\"note\":null}","why":"a shipped order, no note","zod":null,"rust":null,"label":"#8 (shipped, 0 things)"},
+  {"text":"{\"id\":7,\"status\":\"open\",\"items\":[{\"sku\":\"A1\",\"qty\":-5}]}","why":"a quantity below 0","zod":["items.0.qty: Too small: expected number to be >=0"],"rust":"invalid value: integer `-5`, expected u32 at line 1 column 53","label":null},
+  {"text":"{\"id\":7,\"status\":\"lost\",\"items\":[]}","why":"a status there isn't","zod":["status: Invalid option: expected one of \"open\"|\"shipped\""],"rust":"unknown variant `lost`, expected `open` or `shipped` at line 1 column 23","label":null},
+  {"text":"{\"id\":\"7\",\"status\":\"open\",\"items\":[]}","why":"an id that's text","zod":["id: Invalid input: expected number, received string"],"rust":"invalid type: string \"7\", expected u32 at line 1 column 9","label":null}
+]

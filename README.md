@@ -48,6 +48,9 @@ inputs, so you can see where they agree and where they don't.
 13. [One check, in two places](chapters/13-one-check-two-places/README.md):
    one crate, built natively for the server and by rust-js for the
    browser, giving every signup the same answer, byte for byte.
+14. [TypeScript callers](chapters/14-typescript-callers/README.md): what
+   a crate's `.d.ts` promises, what `tsc` checks, and why only a reader
+   checks a number's range: check at the edge, trust inside.
 
 ## Run it
 
