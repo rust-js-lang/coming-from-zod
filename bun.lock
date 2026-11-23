@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "coming-from-zod",
+      "dependencies": {
+        "@rust-js/std": "file:rust-js/std",
+        "zod": "4.6.7",
+      },
+    },
+  },
+  "packages": {
+    "@rust-js/std": ["@rust-js/std@file:rust-js/std", {}],
+
+    "zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+  }
+}

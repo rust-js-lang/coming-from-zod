@@ -1,0 +1,13 @@
+{
+  "name": "coming-from-zod",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "rust": "bun rust-js/tooling/cli.js build",
+    "test": "bun test chapters && cargo test --workspace"
+  },
+  "dependencies": {
+    "@rust-js/std": "file:rust-js/std",
+    "zod": "4.6.7"
+  }
+}

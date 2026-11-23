@@ -1,0 +1,10 @@
+[
+  { "text": "{\"name\":\"Ada\",\"age\":36}", "why": "a user", "rust": null },
+  { "text": "{\"name\":\"Ada\",\"age\":36,\"admin\":true}", "why": "an unknown key: both drop it", "rust": null },
+  { "text": "{\"name\":\"Ada\"}", "why": "age is missing", "rust": "missing field `age` at line 1 column 14" },
+  { "text": "{\"name\":\"Ada\",\"age\":\"36\"}", "why": "age is text, not a number", "rust": "invalid type: string \"36\", expected u32 at line 1 column 24" },
+  { "text": "{\"name\":\"Ada\",\"age\":-1}", "why": "age is below zero", "rust": "invalid value: integer `-1`, expected u32 at line 1 column 22" },
+  { "text": "{\"name\":\"Ada\",\"age\":36.5}", "why": "age is not whole", "rust": "invalid type: floating point `36.5`, expected u32 at line 1 column 24" },
+  { "text": "{\"name\":\"Ada\",\"age\":4294967296}", "why": "age is past u32", "rust": "invalid value: integer `4294967296`, expected u32 at line 1 column 30" },
+  { "text": "{\"name\":null,\"age\":36}", "why": "name is null", "rust": "invalid type: null, expected a string at line 1 column 12" }
+]
