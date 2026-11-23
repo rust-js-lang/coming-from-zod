@@ -1,0 +1,2504 @@
+From b92d923177c0e8ec74d3f622b1e5a15ca4801b00 Mon Sep 17 00:00:00 2001
+From: nguyenyou <tunt081295@gmail.com>
+Date: Mon, 23 Nov 2026 18:10:03 +0700
+Subject: [PATCH] feat(rust-js): serde_path_to_error says where in the value a
+ read failed, as native serde_path_to_error does
+
+serde_path_to_error joins the catalog of crates rust-js reads as rustc
+builds them, qualified at 0.1.20 (ADR 1188). Its `deserialize` of
+`serde_json::Deserializer::from_str(text)`'s reader is `$jsonPathRead`:
+the runtime's reader keeping where in the value it is, by the crate's own
+rules, and an error copying that place as it's made. A missing field is
+at its struct, `customer: missing field `email``; an item at its index,
+`items[1].qty`; a key's value at its text, an integer's digits, a bool's
+word; a variant's content at its name; a key not yet read `?`; none for an
+`Option`, a newtype, or a flattened or internally tagged variant's content.
+Its `Error` is `{ path, original }`, shown as the crate shows it, plain,
+`{:#?}`, `{:x?}`, a piece at a time into a writer, and as a `dyn Error`;
+declared `@rust-js/std`'s opaque `JsonPathError` and `JsonPath`. A type's
+own `deserialize` of the reader works too. A plain `serde_json::from_str`
+keeps no place: each step one `undefined` test, its JS unchanged.
+
+serde_json's reader's other methods stay refused (#1626), and so does the
+crate's own `Track`, `Path::iter`, and a read of anything but serde_json's
+reader of text. The struct reader asks its key for its field, `field()`,
+so `deny_unknown_fields`' error is at the key.
+
+Tests: test/serde-path.test.ts, against native serde_path_to_error;
+22 mutations, each caught. Found by coming-from-zod's chapter 5.
+
+Fixes #2379
+Refs #1626
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01YLAVwjpnNqK2VBniftmdWk
+---
+ CHANGELOG.md                                  |   6 +
+ TESTS.md                                      |   2 +
+ .../src/declarations/std_types.rs             |  23 +-
+ crates/rust-js-lower/src/display/debug.rs     |  14 +
+ .../rust-js-lower/src/display/sink_writes.rs  |  12 +
+ crates/rust-js-lower/src/display/written.rs   |  10 +
+ crates/rust-js-lower/src/drops/types.rs       |   7 +
+ crates/rust-js-lower/src/recognition.rs       |   5 +-
+ crates/rust-js-lower/src/recognition/calls.rs |   4 +
+ .../rust-js-lower/src/recognition/shipped.rs  | 115 ++++++-
+ crates/rust-js-lower/src/serde/de.rs          |  10 +
+ crates/rust-js-lower/src/shipped.rs           |  41 ++-
+ crates/rust-js-lower/src/std_types/values.rs  |   3 +-
+ crates/rust-js-lower/src/support.rs           |   7 +
+ crates/rust-js-lower/src/traits/dyns.rs       |   4 +
+ crates/rust-js-mir/src/std_calls.rs           |   8 +
+ crates/rust-js-program/src/runtime.rs         |   8 +
+ .../src/runtime/json_content.js               |  95 +++++-
+ .../src/runtime/json_decoder.js               |   4 +-
+ .../rust-js-program/src/runtime/json_fail.js  |   7 +
+ .../rust-js-program/src/runtime/json_path.js  | 110 +++++++
+ .../src/runtime/json_reader.js                |  57 +++-
+ .../src/runtime/json_value_reader.js          |   5 +
+ docs/architecture.md                          |   4 +-
+ ...-serde-path-to-error-is-a-shipped-crate.md | 135 ++++++++
+ docs/decisions/README.md                      |   1 +
+ docs/guide/libraries/README.md                |  57 ++++
+ docs/guide/libraries/crates-io.md             |   9 +-
+ docs/guide/limitations.md                     |   3 +-
+ .../mutations/lower/declarations/std_types.ts |   8 +
+ .../mutations/lower/recognition/shipped.ts    |   8 +
+ scripts/mutations/lower/shipped.ts            |   8 +
+ scripts/mutations/lower/traits/dyns.ts        |   8 +
+ scripts/mutations/runtime/json_content.ts     |  72 +++++
+ scripts/mutations/runtime/json_fail.ts        |   8 +
+ scripts/mutations/runtime/json_path.ts        |  45 +++
+ scripts/mutations/runtime/json_reader.ts      |  24 ++
+ serde/Cargo.lock                              |  12 +
+ serde/Cargo.toml                              |   1 +
+ serde/flags.ts                                |   2 +-
+ src/cargo.rs                                  |  16 +-
+ std/index.d.ts                                |  12 +
+ std/runtime.js                                | 279 ++++++++++++++--
+ test/serde-path.test.ts                       | 301 ++++++++++++++++++
+ 44 files changed, 1500 insertions(+), 70 deletions(-)
+ create mode 100644 crates/rust-js-program/src/runtime/json_path.js
+ create mode 100644 docs/decisions/1188-serde-path-to-error-is-a-shipped-crate.md
+ create mode 100644 scripts/mutations/runtime/json_path.ts
+ create mode 100644 test/serde-path.test.ts
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index eeff2699b..a433b08d8 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -247,6 +247,12 @@ imports, and `rust-js build` the one way to build an app.
+   rand's `thread_rng` and `OsRng` work, and so do itertools' quickcheck
+   tests. Another getrandom is refused where it's called, naming the
+   qualified version to depend on (ADR 1185).
++- **serde_path_to_error 0.1.20**: its `deserialize` of
++  `serde_json::Deserializer::from_str(text)` says where in the value a read
++  failed, `items[1].qty: invalid value: ..`, by the crate's own rules, and
++  its `Error` is shown, boxed and declared as the crate's. A type's own
++  `deserialize` of that reader works too. A plain `serde_json::from_str`
++  is unchanged and pays nothing (ADR 1188).
+ - **A `fuse` and an `enumerate` of a double-ended or exact-size
+   iterator, from either end** (ADR 0528).
+ - **An impl whose associated type is an iterator over its type
+diff --git a/TESTS.md b/TESTS.md
+index 54eb46163..04f48d026 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -1,5 +1,7 @@
+ # Tests at a glance
+ 
++Changed on 2026-11-23 (#2379, ADR 1188): test/serde-path.test.ts, new, four tests: serde_path_to_error's read against native serde_path_to_error, every rule of where in the value it places a mistake; its `Error` shown padded, as `{:x?}`, into a writer and as a `dyn Error`, and a type's own `deserialize` of serde_json's reader of text; what's refused of either; and its `Error` and `Path` declared `@rust-js/std`'s opaque `JsonPathError` and `JsonPath`.
++
+ Changed on 2026-11-23 (#2325, ADR 0083 amended): test/binaries.test.ts gains a test, a registry crate's panic names its own line against native Rust, serde_json's three `IndexMut` panics, hashbrown's own map's and indexmap's `get_disjoint_mut`; test/shipped-crates.test.ts gains one, serde_json's sites noted by Cargo's check through rust-js and given; test/std-sites.test.ts gains one, std's build's libraries linked once; rust-js-program's unit tests gain `library::registry_sites`' finder.
+ 
+ Changed on 2026-11-23 (#2334, ADR 1186): test/helper-calls.test.ts, one test, holds each file's reads of a helper call by its callee's name, `helper_name()`, at most and exactly test/helper-shapes-known.txt's, a ratchet migrating a file onto `helper_call_of` lowers; rust-js-program's unit tests gain `runtime::signatures`' parse of a parameter list and `js::helper_call`'s, each name a call is read by one its helper declares, of every compiler source.
+diff --git a/crates/rust-js-lower/src/declarations/std_types.rs b/crates/rust-js-lower/src/declarations/std_types.rs
+index 6b70fe46c..1a6600ec0 100644
+--- a/crates/rust-js-lower/src/declarations/std_types.rs
++++ b/crates/rust-js-lower/src/declarations/std_types.rs
+@@ -9,7 +9,9 @@
+ use rustc_hir::def_id::DefId;
+ use rustc_middle::ty::TyCtxt;
+ 
+-use super::super::recognition::{StdCrate, StdItem, is_json_error_def, is_std_def, of_std_crate};
++use super::super::recognition::{
++    JsonPathType, StdCrate, StdItem, is_json_error_def, is_std_def, json_path_def, of_std_crate,
++};
+ 
+ /// One of std's types `@rust-js/std` declares opaque.
+ pub(crate) struct Opaque {
+@@ -22,11 +24,13 @@ pub(crate) struct Opaque {
+ }
+ 
+ /// What an opaque type is of: a std cell, its one type parameter what it
+-/// holds, of whether it's its lock, `std`'s, of `core`'s cell; or
+-/// `serde_json::Error`, whose keys a caller reads (`JSON_ERROR_KEYS`).
++/// holds, of whether it's its lock, `std`'s, of `core`'s cell;
++/// `serde_json::Error`, whose keys a caller reads (`JSON_ERROR_KEYS`); or
++/// serde_path_to_error's `Error` or `Path`, of a qualified one (ADR 1188).
+ enum Of {
+     Cell { item: StdItem, lock: bool },
+     JsonError,
++    JsonPath(JsonPathType),
+ }
+ 
+ impl Opaque {
+@@ -71,6 +75,16 @@ pub(crate) const OPAQUE: &[Opaque] = &[
+         of: Of::JsonError,
+         doc: "A `serde_json::Error`: `line` and `column` its `line()` and `column()`, `message` its text, its `Display` `message`, then ` at line ${line} column ${column}` where `line` isn't 0; `classify()` and the `is_*` tests have no key (#2373).",
+     },
++    Opaque {
++        name: "JsonPathError",
++        of: Of::JsonPath(JsonPathType::Error),
++        doc: "A `serde_path_to_error::Error<serde_json::Error>`: serde_json's error, and where in the value it was made, which Rust's `path()`, `inner()` and `Display` read (ADR 1188).",
++    },
++    Opaque {
++        name: "JsonPath",
++        of: Of::JsonPath(JsonPathType::Path),
++        doc: "A `serde_path_to_error::Path`: where in a value a read failed, its `Display` `items[1].qty` (ADR 1188).",
++    },
+ ];
+ 
+ /// The iterators `@rust-js/std` declares structural, by the trait each
+@@ -90,6 +104,7 @@ pub(crate) fn opaque(tcx: TyCtxt<'_>, did: DefId) -> Option<&'static Opaque> {
+     (OPAQUE.iter()).find(|opaque| match opaque.of {
+         Of::Cell { item, lock: its } => is_std_def(tcx, did, item) && its == lock,
+         Of::JsonError => is_json_error_def(tcx, did),
++        Of::JsonPath(of) => json_path_def(tcx, did) == Some(of),
+     })
+ }
+ 
+@@ -111,7 +126,7 @@ pub fn module() -> String {
+             Of::JsonError => (JSON_ERROR_KEYS.iter())
+                 .map(|(key, ty)| format!("  readonly {key}: {ty};\n"))
+                 .collect(),
+-            Of::Cell { .. } => String::new(),
++            Of::Cell { .. } | Of::JsonPath(_) => String::new(),
+         };
+         out.push_str(&format!(
+             "\ndeclare const {brand}: unique symbol;\n/** {} */\nexport interface {}{params} {{\n  readonly [{brand}]: {held};\n{keys}}}\n",
+diff --git a/crates/rust-js-lower/src/display/debug.rs b/crates/rust-js-lower/src/display/debug.rs
+index 452767bc1..9488df783 100644
+--- a/crates/rust-js-lower/src/display/debug.rs
++++ b/crates/rust-js-lower/src/display/debug.rs
+@@ -2,6 +2,7 @@
+ //! and the items of a collection.
+ 
+ use super::*;
++use crate::recognition::JsonPathType;
+ use crate::recognition::{c_str_error, is_c_str, is_c_string};
+ 
+ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+@@ -328,6 +329,19 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         if self.is_json_error(ty) {
+             return Ok(Expr::call(Expr::helper("$debugJsonError"), vec![value]));
+         }
++        // serde_path_to_error's `Error` and `Path`, their derived `Debug`s,
++        // given the `Formatter`'s options, which an index reads (ADR 1188).
++        if let Some(of) = self.recognition().json_path_type(ty) {
++            let helper = match of {
++                JsonPathType::Error => "$debugJsonPathError",
++                JsonPathType::Path => "$debugJsonPath",
++            };
++            let mut args = vec![value];
++            if !matches!(pretty, Pretty::Plain) {
++                args.push(pretty.options());
++            }
++            return Ok(Expr::call_helper(helper, args));
++        }
+         // A qualified getrandom's error, as its version shows it, given the
+         // `Formatter`'s options, which its numbers read (#2326).
+         if let Some(version) = self.recognition().getrandom_error(ty) {
+diff --git a/crates/rust-js-lower/src/display/sink_writes.rs b/crates/rust-js-lower/src/display/sink_writes.rs
+index 6eaf2b0fe..105265de6 100644
+--- a/crates/rust-js-lower/src/display/sink_writes.rs
++++ b/crates/rust-js-lower/src/display/sink_writes.rs
+@@ -9,6 +9,7 @@
+ 
+ use super::*;
+ use crate::format_spec::{Radix, Spec, options_object};
++use crate::recognition::JsonPathType;
+ use crate::representation::Num;
+ 
+ /// One write into a writer's sink, `f` (`$writerSink`), as std makes it.
+@@ -353,6 +354,17 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+                 };
+                 SinkWrite::Helper(helper, vec![value, Expr::str(version.key()), options])
+             }
++            // serde_path_to_error's `Error` and `Path`, as it writes them (ADR
++            // 1188).
++            Std::FmtDisplay | Std::FmtDebug if let Some(of) = recognition.json_path_type(ty) => {
++                let helper = match (kind, of) {
++                    (Std::FmtDisplay, JsonPathType::Error) => "$writeJsonPathError",
++                    (Std::FmtDisplay, JsonPathType::Path) => "$writeJsonPath",
++                    (_, JsonPathType::Error) => "$writeDebugJsonPathError",
++                    (_, JsonPathType::Path) => "$writeDebugJsonPath",
++                };
++                SinkWrite::Helper(helper, vec![value, options])
++            }
+             _ => return None,
+         })
+     }
+diff --git a/crates/rust-js-lower/src/display/written.rs b/crates/rust-js-lower/src/display/written.rs
+index 8304906f7..29065a9e5 100644
+--- a/crates/rust-js-lower/src/display/written.rs
++++ b/crates/rust-js-lower/src/display/written.rs
+@@ -2,6 +2,7 @@
+ //! string of what a writer's calls write.
+ 
+ use super::*;
++use crate::recognition::JsonPathType;
+ 
+ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+     /// What a call that writes to a formatter, `operation` of `def_id`,
+@@ -625,6 +626,15 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         if self.is_json_error(ty) {
+             return Ok(Expr::call(Expr::helper("$displayJsonError"), vec![value]));
+         }
++        // serde_path_to_error's `Error` and `Path`, as it shows them, which
++        // read none of the `Formatter`'s options (ADR 1188).
++        if let Some(of) = self.recognition().json_path_type(ty) {
++            let helper = match of {
++                JsonPathType::Error => "$displayJsonPathError",
++                JsonPathType::Path => "$displayJsonPath",
++            };
++            return Ok(Expr::call(Expr::helper(helper), vec![value]));
++        }
+         // A qualified getrandom's error, as its version shows it, given the
+         // `Formatter`'s options, which the OS's words' `pad` reads (#2326).
+         if let Some(version) = self.recognition().getrandom_error(ty) {
+diff --git a/crates/rust-js-lower/src/drops/types.rs b/crates/rust-js-lower/src/drops/types.rs
+index 5ef2865f5..b49ec7273 100644
+--- a/crates/rust-js-lower/src/drops/types.rs
++++ b/crates/rust-js-lower/src/drops/types.rs
+@@ -535,6 +535,13 @@ impl<'a, 'tcx> DropQuery<'a, 'tcx> {
+             ty::Adt(..) if self.recognition.is_json_error(ty) => Drops::Nothing,
+             // A qualified getrandom's error, its code (#2326).
+             ty::Adt(..) if self.recognition.getrandom_error(ty).is_some() => Drops::Nothing,
++            // serde_path_to_error's `Error` and `Path`, its text and numbers,
++            // and serde_json's reader of text, the runtime's (ADR 1188).
++            ty::Adt(..)
++                if self.recognition.json_path_type(ty).is_some() || self.recognition.is_json_text_reader(ty) =>
++            {
++                Drops::Nothing
++            }
+             // An `io::Error`: the error it may hold, a `Box<dyn Error + Send +
+             // Sync>`, which its drop drops (ADR 0462, amended).
+             ty::Adt(..)
+diff --git a/crates/rust-js-lower/src/recognition.rs b/crates/rust-js-lower/src/recognition.rs
+index f203c4726..019c7e6db 100644
+--- a/crates/rust-js-lower/src/recognition.rs
++++ b/crates/rust-js-lower/src/recognition.rs
+@@ -54,7 +54,7 @@ mod unrecognized;
+ mod wrappers;
+ mod zip_folds;
+ 
+-pub(crate) use self::shipped::getrandom_error_type;
++pub(crate) use self::shipped::{JsonPathType, getrandom_error_type, json_path_def};
+ pub use self::{
+     adapter_types::*, calls::*, compiled_std::*, fmt::*, iterators::*, js_items::*, json::*, serde::*,
+     specialization::*, std_crates::*, std_items::*, std_paths::*, std_steps::*, traits::*, type_facts::*, types::*,
+@@ -275,6 +275,9 @@ pub enum Std {
+     /// getrandom's bytes and its `Error`'s code, of a qualified getrandom
+     /// rustc builds (#2326).
+     Getrandom(super::shipped::GetrandomOp),
++    /// serde_path_to_error's read of serde_json's text reader and its
++    /// `Error`'s parts, of a qualified one rustc builds (ADR 1188).
++    JsonPath(super::shipped::JsonPathOp),
+     /// `panic::Location`'s (ADR 0427).
+     Location(super::std_types::location::LocationOp),
+     /// A `Backtrace`'s (ADR 0568).
+diff --git a/crates/rust-js-lower/src/recognition/calls.rs b/crates/rust-js-lower/src/recognition/calls.rs
+index 7d895bf30..437bce868 100644
+--- a/crates/rust-js-lower/src/recognition/calls.rs
++++ b/crates/rust-js-lower/src/recognition/calls.rs
+@@ -237,6 +237,10 @@ impl<'a, 'tcx> Recognition<'a, 'tcx> {
+         if let Some(op) = self.getrandom_op(def_id, args) {
+             return Some(Some(Std::Getrandom(op)));
+         }
++        // serde_path_to_error's, of a qualified one rustc builds (ADR 1188).
++        if let Some(op) = self.json_path_op(def_id, args) {
++            return Some(Some(Std::JsonPath(op)));
++        }
+         // The process a program runs in, and its files, Node's (ADR 0391).
+         match node_only(tcx, def_id) {
+             Some(NodeOnly::Process(op)) => return Some(Some(Std::Process(op))),
+diff --git a/crates/rust-js-lower/src/recognition/shipped.rs b/crates/rust-js-lower/src/recognition/shipped.rs
+index 35cc05248..2f653a7c4 100644
+--- a/crates/rust-js-lower/src/recognition/shipped.rs
++++ b/crates/rust-js-lower/src/recognition/shipped.rs
+@@ -1,8 +1,9 @@
+ //! Which items of a crate rustc builds that rust-js writes the JS of an item
+-//! is, of the version its catalog qualified (ADR 0529): getrandom's (#2326).
++//! is, of the version its catalog qualified (ADR 0529): getrandom's (#2326),
++//! and serde_path_to_error's (ADR 1188).
+ 
+ use super::Recognition;
+-use crate::shipped::{GetrandomOp, GetrandomVersion};
++use crate::shipped::{GetrandomOp, GetrandomVersion, JsonPathOp};
+ use rustc_hir::def::DefKind;
+ use rustc_middle::ty::{self, Ty, TyCtxt};
+ use rustc_span::def_id::{CrateNum, DefId};
+@@ -115,3 +116,113 @@ impl<'tcx> Recognition<'_, 'tcx> {
+         getrandom_error_type(self.tcx, ty)
+     }
+ }
++
++/// Whether the crate `krate` is serde_path_to_error, of the version the
++/// catalog qualified (ADR 1188).
++fn is_json_path_crate(tcx: TyCtxt<'_>, krate: CrateNum) -> bool {
++    tcx.crate_name(krate).as_str() == "serde_path_to_error" && qualified_version(tcx, krate).is_some()
++}
++
++/// Whether `ty` is serde_json's `Error`, which a serde_path_to_error
++/// `Error` of rust-js's holds.
++fn is_json_error_ty(tcx: TyCtxt<'_>, ty: Ty<'_>) -> bool {
++    matches!(ty.kind(), ty::Adt(adt, _) if super::is_json_error_def(tcx, adt.did()))
++}
++
++/// serde_path_to_error's types rust-js writes, of a qualified one (ADR
++/// 1188): its `Error` of serde_json's error, `{ path, original }`, and its
++/// `Path`, the segments.
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub(crate) enum JsonPathType {
++    Error,
++    Path,
++}
++
++/// Which of serde_path_to_error's types `did` is, if one rust-js writes, of
++/// whatever it holds: its `Error`, or its `Path`.
++pub(crate) fn json_path_def(tcx: TyCtxt<'_>, did: DefId) -> Option<JsonPathType> {
++    if !is_json_path_crate(tcx, did.krate) {
++        return None;
++    }
++    match tcx.item_name(did).as_str() {
++        "Error" => Some(JsonPathType::Error),
++        "Path" => Some(JsonPathType::Path),
++        _ => None,
++    }
++}
++
++/// Which of serde_path_to_error's types `ty` is, if one rust-js writes: its
++/// `Error` only of serde_json's error.
++pub(crate) fn json_path_type<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<JsonPathType> {
++    let ty::Adt(adt, args) = ty.kind() else {
++        return None;
++    };
++    match json_path_def(tcx, adt.did())? {
++        JsonPathType::Error if !args.types().next().is_some_and(|e| is_json_error_ty(tcx, e)) => None,
++        of => Some(of),
++    }
++}
++
++/// Whether `ty` is serde_json's reader of text, `Deserializer<StrRead>`,
++/// which `Deserializer::from_str` makes and serde_path_to_error reads: the
++/// runtime's `$JsonReader` (ADR 1188).
++pub(crate) fn is_json_text_reader<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
++    let ty::Adt(adt, args) = ty.kind() else {
++        return false;
++    };
++    tcx.crate_name(adt.did().krate).as_str() == "serde_json"
++        && tcx.item_name(adt.did()).as_str() == "Deserializer"
++        && matches!(args.type_at(0).kind(), ty::Adt(read, _) if tcx.item_name(read.did()).as_str() == "StrRead")
++}
++
++impl<'tcx> Recognition<'_, 'tcx> {
++    /// Which of serde_path_to_error's functions `id` of `args` is (ADR
++    /// 1188): its `deserialize` of serde_json's text reader, which
++    /// serde_json's `Deserializer::from_str` makes, and its `Error`'s path
++    /// and serde_json's error. Everything else of it is refused where it's
++    /// called, and serde_json's reader's other methods (#1626).
++    pub(super) fn json_path_op(&self, id: DefId, args: ty::GenericArgsRef<'tcx>) -> Option<JsonPathOp> {
++        let tcx = self.tcx;
++        let name = tcx.item_name(id);
++        let of_impl = || {
++            let imp = tcx.inherent_impl_of_assoc(id)?;
++            Some(tcx.type_of(imp).instantiate_identity().skip_normalization())
++        };
++        if tcx.crate_name(id.krate).as_str() == "serde_json" {
++            let reader = of_impl().is_some_and(|of| is_json_text_reader(tcx, of));
++            return (reader && name.as_str() == "from_str").then_some(JsonPathOp::Reader);
++        }
++        if !is_json_path_crate(tcx, id.krate) {
++            return None;
++        }
++        // Its `Error`'s own methods, of serde_json's error, its impl's `E`.
++        if let Some(of) = of_impl() {
++            let ty::Adt(adt, _) = of.kind() else {
++                return None;
++            };
++            let of_json = args.types().next().is_some_and(|e| is_json_error_ty(tcx, e));
++            if tcx.item_name(adt.did()).as_str() != "Error" || !of_json {
++                return None;
++            }
++            return match name.as_str() {
++                "path" => Some(JsonPathOp::Path),
++                "inner" | "into_inner" => Some(JsonPathOp::Inner),
++                _ => None,
++            };
++        }
++        // `deserialize::<D, T>`, of `&mut` serde_json's text reader.
++        let reads_text = (args.types().next())
++            .is_some_and(|d| matches!(d.kind(), ty::Ref(_, d, ty::Mutability::Mut) if is_json_text_reader(tcx, *d)));
++        (tcx.def_kind(id) == DefKind::Fn && name.as_str() == "deserialize" && reads_text).then_some(JsonPathOp::Read)
++    }
++
++    /// Which of serde_path_to_error's types `ty` is, if one rust-js writes.
++    pub(crate) fn json_path_type(&self, ty: Ty<'tcx>) -> Option<JsonPathType> {
++        json_path_type(self.tcx, ty)
++    }
++
++    /// Whether `ty` is serde_json's reader of text (ADR 1188).
++    pub(crate) fn is_json_text_reader(&self, ty: Ty<'tcx>) -> bool {
++        is_json_text_reader(self.tcx, ty)
++    }
++}
+diff --git a/crates/rust-js-lower/src/serde/de.rs b/crates/rust-js-lower/src/serde/de.rs
+index 27db76515..fe2efd631 100644
+--- a/crates/rust-js-lower/src/serde/de.rs
++++ b/crates/rust-js-lower/src/serde/de.rs
+@@ -110,6 +110,16 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         Ok(Expr::call(Expr::helper("$fromJson"), vec![text, read]))
+     }
+ 
++    /// `serde_path_to_error::deserialize::<_, T>(reader)`: `$jsonPathRead(reader,
++    /// read)`, `read` the function that reads a `T`, of serde_json's reader of
++    /// text, which keeps where in the value it is as it reads (ADR 1188).
++    pub(crate) fn json_path_value(&mut self, reader: Expr, ty: Ty<'tcx>, span: Span) -> R<Expr> {
++        self.refuse_dropping_read(ty, span)?;
++        let read = self.json_reader(ty, span)?;
++        self.use_reader();
++        Ok(Expr::call(Expr::helper("$jsonPathRead"), vec![reader, read]))
++    }
++
+     /// `function orderDeserialize_deserialize(json) { .. }`: the derived
+     /// `deserialize`, reading from serde_json's reader.
+     pub(super) fn lower_deserialize(&mut self, method: DefId) -> R<js::Function> {
+diff --git a/crates/rust-js-lower/src/shipped.rs b/crates/rust-js-lower/src/shipped.rs
+index c00d7204c..2fceeef47 100644
+--- a/crates/rust-js-lower/src/shipped.rs
++++ b/crates/rust-js-lower/src/shipped.rs
+@@ -1,7 +1,8 @@
+ //! The API of a crate rustc builds that rust-js writes the JS of, as it
+ //! writes std's: memchr's searches (ADR 0529), over the byte arrays slices
+-//! are, whose indices are the slice's; and getrandom's bytes, Web Crypto's,
+-//! and its `Error`, its code (#2326).
++//! are, whose indices are the slice's; getrandom's bytes, Web Crypto's,
++//! and its `Error`, its code (#2326); and serde_path_to_error's read, its
++//! `Error` serde_json's and where in the value it was made (ADR 1188).
+ 
+ use super::recognition::Std;
+ use super::{Expr, FnCx};
+@@ -81,7 +82,43 @@ pub enum GetrandomOp {
+     NewCustom,
+ }
+ 
++/// One of serde_path_to_error's functions rust-js writes, or serde_json's
++/// reader of text, which its `deserialize` reads (ADR 1188).
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++pub enum JsonPathOp {
++    /// serde_json's `Deserializer::from_str(text)`: the runtime's reader of
++    /// it, `new $JsonReader(text)`.
++    Reader,
++    /// `deserialize::<_, T>(reader)`: `$jsonPathRead(reader, read)`, `read`
++    /// the function that reads a `T`.
++    Read,
++    /// An `Error`'s `path()`: its segments.
++    Path,
++    /// An `Error`'s `inner()` and `into_inner()`: serde_json's error.
++    Inner,
++}
++
+ impl<'a, 'tcx> FnCx<'a, 'tcx> {
++    /// A call of serde_path_to_error's, or serde_json's reader of text made,
++    /// `given` its one argument (ADR 1188).
++    pub fn json_path_call(
++        &mut self,
++        op: JsonPathOp,
++        given: Expr,
++        args: rustc_middle::ty::GenericArgsRef<'tcx>,
++        span: rustc_span::Span,
++    ) -> crate::R<Expr> {
++        Ok(match op {
++            JsonPathOp::Reader => Expr::new_(Expr::helper("$JsonReader"), vec![given]),
++            JsonPathOp::Read => {
++                let ty = args.types().nth(1).expect("`deserialize::<D, T>`");
++                self.json_path_value(given, ty, span)?
++            }
++            JsonPathOp::Path => Expr::member(given, "path"),
++            JsonPathOp::Inner => Expr::member(given, "original"),
++        })
++    }
++
+     /// A call of getrandom's (#2326): `$getrandom(dest, ..)` of a fill, the
+     /// runtime's; a code as it is. `None` if `known` is another.
+     pub(crate) fn getrandom_call(&mut self, known: Std, values: &mut std::vec::IntoIter<Expr>) -> Option<Expr> {
+diff --git a/crates/rust-js-lower/src/std_types/values.rs b/crates/rust-js-lower/src/std_types/values.rs
+index b2f59b403..06b5d453d 100644
+--- a/crates/rust-js-lower/src/std_types/values.rs
++++ b/crates/rust-js-lower/src/std_types/values.rs
+@@ -711,7 +711,8 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+             | Std::DequeRemove
+             | Std::Step(_)
+             | Std::ToJson(_)
+-            | Std::FromJson => {
++            | Std::FromJson
++            | Std::JsonPath(_) => {
+                 unreachable!("handled above")
+             }
+             Std::Method(_)
+diff --git a/crates/rust-js-lower/src/support.rs b/crates/rust-js-lower/src/support.rs
+index 5803a81ab..c9e20b8ff 100644
+--- a/crates/rust-js-lower/src/support.rs
++++ b/crates/rust-js-lower/src/support.rs
+@@ -123,6 +123,13 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+             ty::Adt(..) if self.is_json_error(ty) || self.is_json_number(ty) => return None,
+             // A qualified getrandom's error, its code (#2326).
+             ty::Adt(..) if self.recognition().getrandom_error(ty).is_some() => return None,
++            // serde_path_to_error's `Error`, `{ path, original }`, and `Path`,
++            // and serde_json's reader of text, a `$JsonReader` (ADR 1188).
++            ty::Adt(..)
++                if self.recognition().json_path_type(ty).is_some() || self.recognition().is_json_text_reader(ty) =>
++            {
++                return None;
++            }
+             // `{ file, line, column }` (ADR 0427).
+             ty::Adt(..) if self.recognition().is_location(ty) => return None,
+             // `undefined`, or JS's stack (ADR 0568).
+diff --git a/crates/rust-js-lower/src/traits/dyns.rs b/crates/rust-js-lower/src/traits/dyns.rs
+index 5907ad856..5400d9fd0 100644
+--- a/crates/rust-js-lower/src/traits/dyns.rs
++++ b/crates/rust-js-lower/src/traits/dyns.rs
+@@ -200,6 +200,10 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         let helper = match () {
+             _ if self.is_parse_error(ty) => "$parseErrorDyn",
+             _ if self.is_json_error(ty) => "$jsonErrorDyn",
++            // serde_path_to_error's, as it shows it (ADR 1188).
++            _ if self.recognition().json_path_type(ty) == Some(crate::recognition::JsonPathType::Error) => {
++                "$jsonPathErrorDyn"
++            }
+             _ if self.recognition().is_io_error(ty) => "$ioErrorDyn",
+             _ => return None,
+         };
+diff --git a/crates/rust-js-mir/src/std_calls.rs b/crates/rust-js-mir/src/std_calls.rs
+index cd2569bb2..f6c4a8130 100644
+--- a/crates/rust-js-mir/src/std_calls.rs
++++ b/crates/rust-js-mir/src/std_calls.rs
+@@ -1034,6 +1034,14 @@ impl<'mcx, 'a, 'tcx> MirCx<'mcx, 'a, 'tcx> {
+                     this.json_value(text, ty, span)?
+                 }))
+             }),
++            // serde_path_to_error's, and serde_json's reader of text it reads
++            // (ADR 1188).
++            Std::JsonPath(op) => lower(move |this, _, values, _| {
++                Ok(Value::Expr({
++                    let given = this.value_expr(values.next().expect("its argument"), span)?;
++                    this.json_path_call(op, given, generic_args, span)?
++                }))
++            }),
+             Std::NonZeroNew => lower(move |this, _, values, out| {
+                 Ok(Value::Expr({
+                     let n = this.value_expr(values.next().expect("the number"), span)?;
+diff --git a/crates/rust-js-program/src/runtime.rs b/crates/rust-js-program/src/runtime.rs
+index 40ae66c1c..bda889317 100644
+--- a/crates/rust-js-program/src/runtime.rs
++++ b/crates/rust-js-program/src/runtime.rs
+@@ -263,6 +263,7 @@ helpers! {
+     FromJson,
+     JsonValue,
+     JsonError,
++    JsonPath,
+     JsonStdForms,
+     StringError,
+     Channel,
+@@ -459,6 +460,10 @@ const PURE: &[&str] = &[
+     "$debugJsonNumber",
+     "$displayJsonError",
+     "$debugJsonError",
++    "$displayJsonPath",
++    "$displayJsonPathError",
++    "$debugJsonPath",
++    "$debugJsonPathError",
+     "$jsonValueAs",
+     "$jsonGet",
+     "$jsonIndex",
+@@ -1083,6 +1088,9 @@ impl Helper {
+             // A `serde_json::Error`, `{ message, line, column }`, shown as serde_json
+             // shows one: a place only when it has one (line 0 is none).
+             Helper::JsonError => include_str!("runtime/json_error.js"),
++            // serde_path_to_error's read and its `Error`, `{ path, original }`,
++            // shown as the crate shows it (ADR 1188).
++            Helper::JsonPath => include_str!("runtime/json_path.js"),
+             Helper::JsonStdForms => include_str!("runtime/json_std_forms.js"),
+             Helper::StringError => include_str!("runtime/string_error.js"),
+             Helper::Channel => include_str!("runtime/channel.js"),
+diff --git a/crates/rust-js-program/src/runtime/json_content.js b/crates/rust-js-program/src/runtime/json_content.js
+index b05965e4a..4eb59ff46 100644
+--- a/crates/rust-js-program/src/runtime/json_content.js
++++ b/crates/rust-js-program/src/runtime/json_content.js
+@@ -134,6 +134,7 @@ class $JsonSeq {
+   constructor(reader) {
+     this.reader = reader;
+     this.first = true;
++    this.index = 0;
+   }
+ 
+   // `has_next_element`.
+@@ -154,8 +155,17 @@ class $JsonSeq {
+     return true;
+   }
+ 
++  // Of a read serde_path_to_error tracks, the item is at its index:
++  // `items[1]`, its comma's and its `]`'s mistakes the sequence's own.
+   value(read) {
+-    return read(this.reader);
++    const chain = this.reader.chain;
++    if (!chain) return read(this.reader);
++    chain.push(this.index++);
++    try {
++      return read(this.reader);
++    } finally {
++      chain.pop();
++    }
+   }
+ 
+   // The `i`th of `expected`'s items.
+@@ -203,8 +213,20 @@ class $JsonMap {
+     this.first = true;
+   }
+ 
+-  // `has_next_key`.
++  // Of a read serde_path_to_error tracks, the next key is `?` until its
++  // text is read, `a.?`, which a mistake finding it is at; its `}` the
++  // object's own.
+   next() {
++    const chain = this.reader.chain;
++    if (!chain) return this.hasNextKey();
++    chain.push(null);
++    const more = this.hasNextKey();
++    if (!more) chain.pop();
++    return more;
++  }
++
++  // `has_next_key`.
++  hasNextKey() {
+     const reader = this.reader;
+     const peek = reader.parseWhitespace();
+     if (peek === -1) throw reader.peekError("EOF while parsing an object");
+@@ -224,12 +246,21 @@ class $JsonMap {
+   }
+ 
+   key() {
+-    return new $JsonKey(this.reader);
++    return new $JsonKey(this.reader, this);
+   }
+ 
++  // Of a read serde_path_to_error tracks, the value is at its key, `a.b`,
++  // or `a.?` of one that wasn't text; its `:` the object's own.
+   value(read) {
+     this.reader.parseObjectColon();
+-    return read(this.reader);
++    const chain = this.reader.chain;
++    if (!chain) return read(this.reader);
++    chain.push(this.keyRead);
++    try {
++      return read(this.reader);
++    } finally {
++      chain.pop();
++    }
+   }
+ }
+ 
+@@ -263,28 +294,52 @@ class $JsonContentMap {
+ }
+ 
+ // `MapKey`: an object's key, from its opening quote. A number or a `bool`
+-// is read from inside the quotes.
++// is read from inside the quotes. Of a read serde_path_to_error tracks, the
++// key, once read, is where the rest of its reading is, its `CaptureKey`'s:
++// its text, a number's digits, or a `bool`'s word; each method ends its
++// reading, `read`, and the map keeps it for its value's place.
+ class $JsonKey {
+-  constructor(reader) {
++  constructor(reader, map) {
+     this.reader = reader;
++    this.map = map;
+   }
+ 
+-  string() {
++  text() {
+     this.reader.index++;
+-    return this.reader.parseStr();
++    const key = this.reader.parseStr();
++    this.reader.captureKey(key);
++    return key;
++  }
++
++  read(value) {
++    const chain = this.reader.chain;
++    if (chain) this.map.keyRead = chain.pop();
++    return value;
++  }
++
++  string() {
++    return this.read(this.text());
+   }
+ 
+   char() {
+-    return $jsonChar(this.string());
++    return this.read($jsonChar(this.text()));
+   }
+ 
+   ignore() {
+-    this.string();
++    this.read(this.text());
+   }
+ 
+   content() {
+-    const value = this.string();
+-    return { type: "str", value, borrowed: !this.reader.escaped };
++    const value = this.text();
++    return this.read({ type: "str", value, borrowed: !this.reader.escaped });
++  }
++
++  // A struct's field it names, as serde's derived identifier reads it:
++  // an unknown one's mistake, `deny_unknown_fields`', at the key.
++  field(fields, deny) {
++    const key = this.text();
++    const i = $jsonField(key, fields, deny);
++    return this.read([{ type: "str", value: key, borrowed: !this.reader.escaped }, i]);
+   }
+ 
+   number(read) {
+@@ -292,10 +347,12 @@ class $JsonKey {
+     reader.index++;
+     const c = reader.peek();
+     if (!(c === 45 || (c >= 48 && c <= 57))) throw reader.error("invalid value: expected key to be a number in quotes");
++    reader.keying = reader.chain !== undefined;
+     const value = read(reader);
++    reader.keying = false;
+     if (reader.peek() !== 34) throw reader.peekError('expected `"`');
+     reader.index++;
+-    return value;
++    return this.read(value);
+   }
+ 
+   bool() {
+@@ -306,12 +363,15 @@ class $JsonKey {
+       if (c === -1) throw reader.peekError("EOF while parsing a value");
+       if (c === 116) {
+         reader.parseIdent('rue"');
+-        return true;
++        reader.captureKey("true");
++        return this.read(true);
+       }
+       if (c === 102) {
+         reader.parseIdent('alse"');
+-        return false;
++        reader.captureKey("false");
++        return this.read(false);
+       }
++      // Not visited: serde_json's own mistake, which isn't the key's.
+       throw $jsonError(`invalid type: string ${$debugStr(reader.parseStr())}, expected a boolean`);
+     } catch (e) {
+       throw reader.fixPosition(e);
+@@ -326,6 +386,11 @@ class $JsonContentKey {
+     this.key = new $JsonContent(key, owned);
+   }
+ 
++  field(fields, deny) {
++    const key = this.content();
++    return [key, $jsonField(key.value, fields, deny)];
++  }
++
+   string() {
+     return this.key.string();
+   }
+diff --git a/crates/rust-js-program/src/runtime/json_decoder.js b/crates/rust-js-program/src/runtime/json_decoder.js
+index b090ed81b..6231ec91a 100644
+--- a/crates/rust-js-program/src/runtime/json_decoder.js
++++ b/crates/rust-js-program/src/runtime/json_decoder.js
+@@ -137,9 +137,7 @@ class $JsonDecoder {
+     const seen = new Array(fields.length).fill(false);
+     const kept = [];
+     while (map.next()) {
+-      const keyContent = map.key().content();
+-      const key = keyContent.value;
+-      const i = $jsonField(key, fields, deny && !flatten);
++      const [keyContent, i] = map.key().field(fields, deny && !flatten);
+       if (i < 0 && flatten) {
+         kept.push([keyContent, map.value((json) => json.content())]);
+         continue;
+diff --git a/crates/rust-js-program/src/runtime/json_fail.js b/crates/rust-js-program/src/runtime/json_fail.js
+index 32fe784e1..6df8e090b 100644
+--- a/crates/rust-js-program/src/runtime/json_fail.js
++++ b/crates/rust-js-program/src/runtime/json_fail.js
+@@ -1,9 +1,16 @@
+ 
+ class $JsonError extends Error {
++  // Of a read serde_path_to_error tracks, where in the value it is: the
++  // reader's place's segments (`$jsonPathRead`, ADR 1188).
++  static chain = undefined;
++
+   constructor(message, line = 0, column = 0) {
+     super(message);
+     this.line = line;
+     this.column = column;
++    // Where the reader was as it was made, serde_path_to_error's `Track`,
++    // whose path is the first place a mistake reached.
++    if ($JsonError.chain) this.path = $JsonError.chain.slice();
+   }
+ }
+ function $jsonError(message) {
+diff --git a/crates/rust-js-program/src/runtime/json_path.js b/crates/rust-js-program/src/runtime/json_path.js
+new file mode 100644
+index 000000000..bdfa0ea7a
+--- /dev/null
++++ b/crates/rust-js-program/src/runtime/json_path.js
+@@ -0,0 +1,110 @@
++// serde_path_to_error, a crate rustc builds whose API rust-js writes (ADR
++// 1188): `deserialize(&mut serde_json::Deserializer::from_str(text))`, what
++// `read` reads at the reader's place, not to the text's end, as the crate's
++// `deserialize` reads it. Its error is the crate's `Error`, `{ path, original
++// }`: where in the value the reader was as the first mistake was made, the
++// crate's `Track`, then serde_json's error. A path is its segments: an item's
++// index, a number; a key's text, a string; a variant's name, `{ variant }`;
++// a key that isn't text, `null`, `?`. The reader keeps them as it reads
++// (`$JsonSeq`, `$JsonMap`, `$JsonKey` and `$JsonReader`'s `enum`), and each
++// `$JsonError` made meanwhile keeps a copy; a plain `serde_json::from_str`
++// keeps none.
++function $jsonPathRead(json, read) {
++  const outer = $JsonError.chain;
++  json.chain = $JsonError.chain = [];
++  try {
++    return { TAG: "Ok", _0: read(json) };
++  } catch (e) {
++    if (!(e instanceof $JsonError)) throw e;
++    return { TAG: "Err", _0: { path: e.path ?? [], original: $jsonErrorOf(e) } };
++  } finally {
++    json.chain = undefined;
++    json.keying = false;
++    $JsonError.chain = outer;
++  }
++}
++
++// A `Path`'s `Display` into a writer, as the crate writes it: `.` of none;
++// else each segment, a key's or a variant's text `write!`'s `{}`, an index
++// `[{}]`'s pieces, a key that isn't text `?`, each but an index after its
++// separator, `""` of the first and `.` after.
++function $writeJsonPath(f, path) {
++  if (path.length === 0) return f.write(".");
++  let separator = "";
++  for (const segment of path) {
++    if (typeof segment === "number") {
++      f.write("[");
++      $writeInteger(f, segment);
++      f.write("]");
++    } else {
++      f.write(separator);
++      f.write(segment === null ? "?" : (segment.variant ?? segment));
++    }
++    separator = ".";
++  }
++}
++// Its `Error`'s `Display` into a writer: its path's and `: `, unless the
++// path is none or only keys that aren't text, then serde_json's error's.
++// Neither reads the `Formatter`'s options, as `write!` doesn't.
++function $writeJsonPathError(f, e) {
++  if (!e.path.every((segment) => segment === null)) {
++    $writeJsonPath(f, e.path);
++    f.write(": ");
++  }
++  $writeJsonError(f, e.original);
++}
++// Each's derived `Debug` into a writer: `Error { path, original }`, the
++// path `Path { segments }`, each segment `Seq { index }`, `Map { key }`,
++// `Enum { variant }` or `Unknown`, an index given the `Formatter`'s options,
++// serde_json's error its own `Debug`.
++function $writeDebugJsonPath(f, path, options = {}) {
++  const pretty = options.alternate;
++  const index = (g, n) => $writeDebugInteger(g, n, n.toString(16), n.toString(16).toUpperCase(), options);
++  const segment = (g, s) => {
++    if (s === null) return g.write("Unknown");
++    if (typeof s === "number") return $writeDebugStruct(g, "Seq", [["index", s, index]], pretty);
++    if (typeof s === "string") return $writeDebugStruct(g, "Map", [["key", s, $writeDebugStr]], pretty);
++    $writeDebugStruct(g, "Enum", [["variant", s.variant, $writeDebugStr]], pretty);
++  };
++  const segments = (g, items) => $writeDebugList(g, items, segment, pretty);
++  $writeDebugStruct(f, "Path", [["segments", path, segments]], pretty);
++}
++function $writeDebugJsonPathError(f, e, options = {}) {
++  const path = (g, p) => $writeDebugJsonPath(g, p, options);
++  const fields = [["path", e.path, path], ["original", e.original, $writeDebugJsonError]];
++  $writeDebugStruct(f, "Error", fields, options.alternate);
++}
++// Each as text, written as into a writer.
++function $jsonPathText(write, ...args) {
++  let text = "";
++  const f = { write: (s) => void (text += s), writeChar: (c) => void (text += c), armed: false };
++  write(f, ...args);
++  return text;
++}
++function $displayJsonPath(path) {
++  return $jsonPathText($writeJsonPath, path);
++}
++function $displayJsonPathError(e) {
++  return $jsonPathText($writeJsonPathError, e);
++}
++function $debugJsonPath(path, options) {
++  return $jsonPathText($writeDebugJsonPath, path, options);
++}
++function $debugJsonPathError(e, options) {
++  return $jsonPathText($writeDebugJsonPathError, e, options);
++}
++
++// Its `Error`, of `TypeId` `type`, as a `dyn Error` (ADR 0141): shown as the
++// crate shows it; its `source()` serde_json's error's, as its `Error` impl's
++// is its `original`'s, which has none; its `type_id` `type` (ADR 0331).
++function $jsonPathErrorDyn(type) {
++  return {
++    Debug: () => ({
++      fmt: (e, options) => $debugJsonPathError(e, options),
++      fmtInto: (f, e, options) => $writeDebugJsonPathError(f, e, options),
++    }),
++    Display: () => ({ fmt: $displayJsonPathError, fmtInto: (f, e) => $writeJsonPathError(f, e) }),
++    source: () => undefined,
++    typeId: () => type,
++  };
++}
+diff --git a/crates/rust-js-program/src/runtime/json_reader.js b/crates/rust-js-program/src/runtime/json_reader.js
+index 536ff4686..ea91a18e5 100644
+--- a/crates/rust-js-program/src/runtime/json_reader.js
++++ b/crates/rust-js-program/src/runtime/json_reader.js
+@@ -9,6 +9,26 @@ class $JsonReader extends $JsonDecoder {
+     this.bytes = new TextEncoder().encode(text);
+     this.index = 0;
+     this.remainingDepth = 128;
++    // Of a read serde_path_to_error tracks, where in the value it is, each
++    // place's segment (`$jsonPathRead`, ADR 1188); and whether it reads a
++    // key's number, whose digits are the key.
++    this.chain = undefined;
++    this.keying = false;
++    this.variantText = undefined;
++  }
++
++  // A key read, as serde_path_to_error's `CaptureKey` keeps it: where the
++  // rest of the key's reading is, and its value's place.
++  captureKey(key) {
++    const chain = this.chain;
++    if (chain) chain[chain.length - 1] = key;
++  }
++
++  // A number read as a key: its digits, an integer's, are the key; a
++  // float's aren't, as serde_path_to_error keeps none of one.
++  captureNumber(n) {
++    if (this.keying && n.kind !== "f") this.captureKey(String(n.value));
++    return n;
+   }
+ 
+   // The next byte, or -1 at the end.
+@@ -38,8 +58,12 @@ class $JsonReader extends $JsonDecoder {
+ 
+   // `fix_position`: a visitor's message has no place, until it gets where
+   // the reader is.
++  // The same error placed, at the place in the value it was made.
+   fixPosition(e) {
+-    return e instanceof $JsonError && e.line === 0 ? this.error(e.message) : e;
++    if (!(e instanceof $JsonError) || e.line !== 0) return e;
++    const fixed = this.error(e.message);
++    fixed.path = e.path;
++    return fixed;
+   }
+ 
+   end() {
+@@ -104,9 +128,9 @@ class $JsonReader extends $JsonDecoder {
+     try {
+       if (peek === 45) {
+         this.index++;
+-        return visit(this.parseInteger(false));
++        return visit(this.captureNumber(this.parseInteger(false)));
+       }
+-      if (peek >= 48 && peek <= 57) return visit(this.parseInteger(true));
++      if (peek >= 48 && peek <= 57) return visit(this.captureNumber(this.parseInteger(true)));
+       throw this.peekInvalidType(expected);
+     } catch (e) {
+       throw this.fixPosition(e);
+@@ -136,6 +160,7 @@ class $JsonReader extends $JsonDecoder {
+     const digits = BigInt(new TextDecoder().decode(this.bytes.subarray(start, this.index)));
+     const value = negative ? -digits : digits;
+     if (value < min || value > max) throw this.error("number out of range");
++    this.captureNumber({ kind: "i", value });
+     if (nonZero && value === 0n) throw this.error(`invalid value: integer \`0\`, expected a nonzero ${type}`);
+     return value;
+   }
+@@ -752,9 +777,15 @@ class $JsonReader extends $JsonDecoder {
+   // `deserialize_enum`: `"Name"`, or `{"Name": ..}`. `visit` gets the
+   // variant's name and a `$JsonVariant` to read what it holds. `enumName` is
+   // the enum's, for a flattened one.
++  // Of a read serde_path_to_error tracks, what a variant holds is at its
++  // name's text, `shape.circle`; its name's own mistakes the enum's.
+   enum(enumName, variants, visit, other) {
+     const peek = this.parseWhitespace();
+-    if (peek === 34) return visit(this.identifier(variants, other), new $JsonVariant(this, true));
++    if (peek === 34) {
++      const name = this.identifier(variants, other);
++      const variant = new $JsonVariant(this, true);
++      return this.chain ? this.within(() => visit(name, variant)) : visit(name, variant);
++    }
+     if (peek !== 123) throw this.peekError(peek === -1 ? "EOF while parsing a value" : "expected value");
+     if (--this.remainingDepth === 0) throw this.peekError("recursion limit exceeded");
+     this.index++;
+@@ -768,7 +799,8 @@ class $JsonReader extends $JsonDecoder {
+       }
+       const name = this.identifier(variants, other);
+       this.parseObjectColon();
+-      value = visit(name, new $JsonVariant(this, false));
++      const variant = new $JsonVariant(this, false);
++      value = this.chain ? this.within(() => visit(name, variant)) : visit(name, variant);
+     } finally {
+       this.remainingDepth++;
+     }
+@@ -780,8 +812,19 @@ class $JsonReader extends $JsonDecoder {
+     throw this.error(c === -1 ? "EOF while parsing an object" : "expected value");
+   }
+ 
+-  // A variant's name, from a string.
++  // `read()` at the variant just named, of a read serde_path_to_error
++  // tracks.
++  within(read) {
++    this.chain.push({ variant: this.variantText });
++    try {
++      return read();
++    } finally {
++      this.chain.pop();
++    }
++  }
++
++  // A variant's name, from a string, whose text a tracked read's place is.
+   identifier(variants, other) {
+-    return this.deserializeStr("variant identifier", (name) => $jsonVariantNamed(name, variants, other));
++    return this.deserializeStr("variant identifier", (name) => $jsonVariantNamed((this.variantText = name), variants, other));
+   }
+ }
+diff --git a/crates/rust-js-program/src/runtime/json_value_reader.js b/crates/rust-js-program/src/runtime/json_value_reader.js
+index 55658d6bb..75c8bb364 100644
+--- a/crates/rust-js-program/src/runtime/json_value_reader.js
++++ b/crates/rust-js-program/src/runtime/json_value_reader.js
+@@ -214,6 +214,11 @@ class $JsonValueKey {
+     return { type: "str", value: this.key, borrowed: false };
+   }
+ 
++  field(fields, deny) {
++    const key = this.content();
++    return [key, $jsonField(key.value, fields, deny)];
++  }
++
+   number(read) {
+     const json = new $JsonReader(this.key);
+     const c = json.peek();
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 58f770172..e7f0478d3 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -522,8 +522,8 @@ area's sweep phrases it as one.
+ | Is an item the standard library's: std's, core's, alloc's or the sysroot's, std's item where the crate loads it, a method of std's trait, one only std can name, which crate a `TypeId`'s key carries? (ADRs 0110, 0331) | `recognition/std_items.rs`; `recognition.rs` | `in_sysroot`, `from_sysroot`, `is_std`, `opt_std_item`, `is_std_method`, `std_private`, `keyed_crate` | | 1 |
+ | Which particular std item is an item, one no diagnostic item names: a pure function, an `f64` constant, `FromStr`, `mem::drop`, `transmute`, `fmt::write`, `PartialEq::eq`, an `Option` presence test, a map's entry, indexmap's map, `pin!`'s, `check_language_ub`? (ADRs 0364, 0408, 0463, 0887) | `recognition/std_items.rs`; `recognition.rs` | `pure_std`, `f64_const`, `is_from_str`, `std_from_str`, `is_mem_drop`, `is_transmute`, `is_fmt_write`, `is_partial_eq`, `option_presence_test`, `is_occupied_entry`, `is_vacant_entry`, `is_index_map`, `is_pin_macro_fn`, `is_check_language_ub` | | 1 |
+ | Which of std's iterator items is an item no diagnostic item names: `ExactSizeIterator`, `by_ref`, `flat_map`, memchr's iterator? (ADR 0871) | `recognition/std_items.rs` | `exact_size_iterator_trait`, `is_by_ref`, `is_flat_map`, `is_memchr_iter` | | 1 |
+-| Which version of a shipped crate the catalog qualified, as its check wrote beside its metadata (`library::qualified`), and which of a qualified getrandom's items an item is: its fills and numbers, its `Error`'s code, OS number and custom code; is a type its `Error`, a code, of which version? (ADR 1185) | `recognition/shipped.rs` | `qualified_version`, `getrandom_version`, `getrandom_error_type`, `getrandom_op`, `getrandom_error` | | 1 |
+-| Which of a qualified getrandom's APIs its version has, and how a call of it or of memchr's searches is written: `$getrandom(dest, "0.2")`, `$memchr(text, [111])` (ADRs 0529, 1185) | `shipped.rs` | `GetrandomVersion`, `of`, `has_code`, `key`, `getrandom_call`, `memchr_call` | | 1 |
++| Which version of a shipped crate the catalog qualified, as its check wrote beside its metadata (`library::qualified`), and which of a qualified getrandom's items an item is: its fills and numbers, its `Error`'s code, OS number and custom code; is a type its `Error`, a code, of which version? Which of a qualified serde_path_to_error's an item or a type is, its `deserialize` of serde_json's reader of text, which `Deserializer::from_str` makes, its `Error`'s `path()` and `inner()`, its `Error` and `Path`? (ADRs 1185, 1188) | `recognition/shipped.rs` | `qualified_version`, `getrandom_version`, `getrandom_error_type`, `getrandom_op`, `getrandom_error`, `json_path_op`, `json_path_def`, `json_path_type`, `is_json_text_reader` | | 1 |
++| Which of a qualified getrandom's APIs its version has, and how a call of it, of memchr's searches or of serde_path_to_error's is written: `$getrandom(dest, "0.2")`, `$memchr(text, [111])`, `$jsonPathRead(reader, read)` (ADRs 0529, 1185, 1188) | `shipped.rs` | `GetrandomVersion`, `of`, `has_code`, `key`, `getrandom_call`, `memchr_call`, `JsonPathOp`, `json_path_call` | | 1 |
+ | What does a function's declaration say of it: C-variadic, `#[inline(never)]`, `#[track_caller]`; is a parameter a trait's `Self`? (ADRs 0427, 0428) | `recognition/std_items.rs` | `is_c_variadic`, `is_noinline`, `tracks_caller`, `is_trait_self` | | 1 |
+ | Does this compile write where a panic was raised, a binary's, not a test build's, whose `main` runs as std's runtime does and alone writes std's hook's text? (ADR 1184, #2335) | `recognition/std_items.rs` | `prints_panic_locations` | | 1 |
+ | Is a type's `==` and `Hash` the crate's own, or a binding of `===`? (ADR 0864) | `recognition/std_items.rs` | `own_eq`, `eq_and_hash`, `eq_bound_to_strict_equality` | | 1 |
+diff --git a/docs/decisions/1188-serde-path-to-error-is-a-shipped-crate.md b/docs/decisions/1188-serde-path-to-error-is-a-shipped-crate.md
+new file mode 100644
+index 000000000..feb130ca5
+--- /dev/null
++++ b/docs/decisions/1188-serde-path-to-error-is-a-shipped-crate.md
+@@ -0,0 +1,135 @@
++# 1188. serde_path_to_error is a shipped crate: the reader keeps where it is
++
++Status: Accepted (2026-11-23, #2379; the lead, m6-react, approved for Tu
++that serde_path_to_error be supported natively, idiomatic Rust in, with no
++API of rust-js's own). Extends [0529](0529-a-shipped-memchr-searches-bytes.md)
++and [1185](1185-getrandom-is-a-shipped-crate.md)'s catalog, and
++[0078](0078-serde-json-reading.md)'s reader; takes `Deserializer::from_str`
++out of #1626.
++
++Case ([0262](0262-when-rust-and-js-disagree.md)): results change, so the
++crate's own rules are kept, path for path: native serde_path_to_error
++0.1.20 over serde_json 1.0.154 is the oracle.
++
++## Context
++
++serde_json says where in the *text* a read failed, `at line 1 column 103`.
++A zod user, or anyone whose JSON is nested, wants where in the *value*:
++`items[1].qty`. Rust's answer is serde_path_to_error:
++
++```rust
++let reader = &mut serde_json::Deserializer::from_str(text);
++let order: Result<Order, _> = serde_path_to_error::deserialize(reader);
++```
++
++rust-js refused both calls (#1626, and the crate wasn't known). The crate
++works by wrapping serde's generic `Deserializer`: every `deserialize_*`,
++`SeqAccess`, `MapAccess` and `EnumAccess` call goes through its wrapper,
++which keeps a chain of where it is, and the first error to pass a wrapper
++records that chain. rust-js doesn't run serde's generic machinery: a
++derive is a table its runtime reader reads by (ADR 0078). So compiling the
++crate would never see a call to wrap.
++
++## Decision
++
++**serde_path_to_error is a shipped crate, built by rustc and qualified at
++0.1.20. rust-js writes its read as the runtime's reader keeping where it
++is in the value, and its `Error` as `{ path, original }`, shown as the
++crate shows it.**
++
++| Rust | JS |
++|---|---|
++| `serde_json::Deserializer::from_str(text)` | `new $JsonReader(text)` |
++| `serde_path_to_error::deserialize::<_, T>(&mut reader)` | `$jsonPathRead(reader, readT)`: `Ok` of a `T` read at the reader's place, not to the text's end, or `Err` of `{ path, original }` |
++| `T::deserialize(&mut reader)` | `$jsonRead(reader, readT)`, as a hand-written impl's read (ADR 0459) |
++| `e.path()`, `e.inner()`, `e.into_inner()` | `e.path`, `e.original`, `e.original` |
++| `{}`, `{:?}` of an `Error` or a `Path` | `$displayJsonPathError(e)`, `$debugJsonPathError(e)`, `$displayJsonPath(p)`, `$debugJsonPath(p)` |
++| `Box<dyn Error>` of an `Error` | `$jsonPathErrorDyn(..)`'s dictionary |
++| an `Error`, a `Path` in a crate's `.d.ts` | `@rust-js/std`'s opaque `JsonPathError`, `JsonPath` (ADR 1149) |
++
++- **The reader keeps the chain; an error copies it as it's made.** A
++  read through serde_path_to_error gives the reader a `chain`, the
++  segments of where it is, and `$JsonError.chain` the same array; a plain
++  `serde_json::from_str` gives none, so each step is one `undefined` test,
++  and its JS output is unchanged. The crate records the chain at the
++  innermost wrapper an error passes, which is where the reader was as the
++  error was made, so `new $JsonError` copies it then. Since an error can
++  be made where it isn't yet placed and placed later (`fixPosition`), the
++  placed error keeps the copy.
++- **Each place pushes its segment for exactly the span the crate's
++  wrapper covers.** One owner of the rules, the runtime reader
++  (`json_content.js`, `json_reader.js`), beside `$JsonError`:
++  - an item: its index, while its value is read; a comma, a `]` or a
++    tuple's `invalid length` is the sequence's own;
++  - a key: `?` from looking for it until its text is read, then the text,
++    until the key is read, `CaptureKey`'s; an integer key its digits and a
++    `bool` key its word, as the crate formats them; a float key, or a
++    `bool` key serde_json refuses itself, stays `?`;
++  - a struct's field name is read as its key, so `deny_unknown_fields`'
++    error is at the key, `customer.extra`, while a duplicate or a missing
++    field is the struct's, `customer` (the struct reader asks its key for
++    its field, `field()`, of each key kind);
++  - a value: its key, while it's read; the `:` before it is the object's;
++  - a variant: its name's text, while what it holds is read; its name's
++    own mistakes, an unknown variant, are the enum's;
++  - `Option`, a newtype, a flattened field, an internally tagged or an
++    untagged variant's content: no segment, as the crate's wrapper sees
++    none of serde's `Content` (ADRs 0079, 0204). What's buffered into a
++    `Content` is still read through the tracked reader, so a syntax error
++    in it is placed.
++- **Its `Error` is serde_json's and the path**, `{ path, original }`, a
++  path the segments: a number an index, a string a key, `{ variant }` a
++  variant's name, `null` a key that isn't text. `Display` is the crate's:
++  the path, `: `, then serde_json's error, the path left out where it's
++  none or only `?`; a `Path`'s is `.` of none, `[1]` an index with no dot
++  before it. Neither reads the `Formatter`'s options. `Debug` is the
++  derived one, `Error { path: Path { segments: [Map { key: .. }, Seq {
++  index: .. }, Enum { variant: .. }, Unknown] }, original: Error(..) }`,
++  pretty and with `{:x?}`'s index. Into a writer, each piece is the
++  crate's `write_str`.
++- **Only serde_json's reader of text.** `deserialize` of a `Value`, the
++  crate's own `Track` and `Deserializer::new`, `Path::iter` and its
++  `Segment`s are refused where they're called; so are serde_json's
++  reader's `end`, streams and the byte and io entry points (#1626).
++- **The catalog owns the version** (ADR 1185): another version, a fork, or
++  one by path or git is its types alone, and a call into it names 0.1.20.
++
++## Alternatives
++
++- **Compile the crate.** Its wrapper wraps calls rust-js never makes.
++  Making the derive go through serde's generic machinery is #1552's plan,
++  far larger, and every plain read would pay for it.
++- **Track always, and let `from_str` drop the path.** Every read would
++  pay for a chain no one reads.
++- **An API of rust-js's own**, a `from_str_with_path`: refused by the
++  one-way rule (idiomatic Rust in).
++- **Catch at each place, as the crate's `trigger` does.** The struct
++  reader checks a field's name after its key is read, so an unknown
++  field's error would be placed at the struct; the copy as the error is
++  made needs only the chain to be right at each moment.
++
++## Why
++
++`test/serde-path.test.ts` compiles a program of every rule above and runs
++it beside native serde_path_to_error, line for line: items,
++keys of text, of numbers past `u32`, of floats and of `bool`s, variants
++external and internal, unknown and duplicate fields, a missing `:`, a key
++not found, an ignored key's broken value, a `Value`'s inside, a flattened
++field, a nested `Vec` in a struct in a `Vec`, a root `Vec`, two reads of
++one reader, `into_inner()`, `{:#?}`. A second program shows the `Error`
++padded, as `{:x?}` and `{:#x?}`, written into a writer, boxed as a `dyn
++Error`, and reads by a type's own `deserialize`. The refusals and the
++declarations are held by the same file.
++
++## Consequences
++
++- `$JsonError` has a static `chain`, and a tracked error a `path`.
++- `structMap` asks a map's key for its field, `field()`, which each key
++  kind has, where it read the key and then looked the field up.
++- Mutations: each segment's span (an item's index, a key's `?`, its text,
++  a number's or a `bool`'s, a float's none, a variant's, a value's, the
++  colon's and an unknown field's place), the error's copy, a placed
++  error's path, the `Display`'s dot before an index, `.` and the omitted
++  path, the `Debug`'s `Enum`, `{:x?}`'s index, `inner()`, the `dyn`'s
++  dictionary, the read of anything but text, and `Path` declared as
++  `Error`.
+diff --git a/docs/decisions/README.md b/docs/decisions/README.md
+index cd6b0461e..0ccfd783e 100644
+--- a/docs/decisions/README.md
++++ b/docs/decisions/README.md
+@@ -1147,4 +1147,5 @@ a number.
+ - [1183 The MIR intervals' states share what they hold](1183-the-mir-intervals-states-share-what-they-hold.md) *(#2310, #2308: a `State`'s maps and sets persistent, `imbl`'s, a clone sharing all and a change copying its path; `analysis/intervals/shared.rs` the one owner of what they mean, an `IndexMap`'s and `IndexSet`'s; a function of 3,000 statements 5.35 to 0.29 GB, every answer the same)*
+ - [1184 A binary crate runs its `main` as std's runtime does](1184-a-binary-crate-runs-its-main-as-stds-runtime-does.md) *(#2292: `--crate-type bin`'s `$main`, its status and std's hook's text where a panic is raised; every panic's place made as it compiles, the caller's `raisedAt` or std's own `$stdSites`, walked from a whole std's MIR by `bun run std`; a `Location` its text; difference 10 gone, 62 added)*
+ - [1185 getrandom is a shipped crate: Web Crypto's bytes, its `Error` its code](1185-getrandom-is-a-shipped-crate.md) *(#2326: rustc builds each qualified getrandom, 0.1.16 to 0.4.3, given its own custom-backend opt-in unless its check chooses one; `$getrandom` over `crypto.getRandomValues`; its `Error` a number shown as its version shows it; `<rmeta>.rust-js-qualified` the catalog's version fact; supersedes ADR 1112's getrandom part)*
++- [1188 serde_path_to_error is a shipped crate: the reader keeps where it is](1188-serde-path-to-error-is-a-shipped-crate.md) *(#2379: rustc builds serde_path_to_error 0.1.20; its `deserialize` of `serde_json::Deserializer::from_str`'s reader is `$jsonPathRead`, the runtime's reader keeping where it is in the value by the crate's rules, an error copying it as it's made; its `Error` `{ path, original }` shown as the crate shows it; a plain `from_str` unchanged; extends 0078, 0529 and 1185)*
+ - [1186 A helper call is read by its declared parameter names](1186-a-helper-call-is-read-by-its-declared-parameter-names.md) *(#2334: `runtime/signatures.rs`, the helpers' declarations read once, each function's parameters; `js::HelperCall`, `helper_call_of("$lent")?.given("kind")`; `Known::Padded`; a contract test and a ratchet of `helper_name()` reads)*
+diff --git a/docs/guide/libraries/README.md b/docs/guide/libraries/README.md
+index 016c0eef6..6241b18b6 100644
+--- a/docs/guide/libraries/README.md
++++ b/docs/guide/libraries/README.md
+@@ -884,6 +884,63 @@ Without `#[rust_js::tag]` and the names, the JSON is the same and the
+ declaration is rust-js's, `{ TAG: "Circle"; radius: number } | { TAG:
+ "Square"; side: number }`.
+ 
++serde_json's error says where in the text a read failed, `at line 1
++column 29`. To say where in the value, `items[1].qty`, read through
++serde_path_to_error, a crate rust-js knows: its `deserialize` of
++`serde_json::Deserializer::from_str(text)` is the runtime's reader,
++keeping where it is as it reads, by the crate's own rules, and its
++`Error` shows the place, then serde_json's error. A missing field is at
++its struct, `customer`, not at the field, as the crate says it. A
++plain `serde_json::from_str` keeps no place and pays nothing for it
++([ADR 1188](../../decisions/1188-serde-path-to-error-is-a-shipped-crate.md)):
++
++```rust
++use serde::Deserialize;
++
++#[derive(Deserialize)]
++pub struct Item {
++    pub qty: u32,
++}
++
++#[derive(Deserialize)]
++pub struct Order {
++    pub items: Vec<Item>,
++}
++
++/// An `Order`, or where in it the text went wrong: of
++/// `{"items":[{"qty":1},{"qty":-1}]}`, `items[1].qty: invalid value: ..`.
++pub fn parse(text: &str) -> Result<Order, String> {
++    let reader = &mut serde_json::Deserializer::from_str(text);
++    serde_path_to_error::deserialize(reader).map_err(|error| error.to_string())
++}
++```
++
++```js
++import { $JsonReader, $displayJsonPathError, $json, $jsonPathRead } from "@rust-js/std";
++
++function itemDeserialize_deserialize(json) {
++  return json.struct("struct Item", [["qty", $json.u32]], ([qty]) => ({ qty }));
++}
++
++function orderDeserialize_deserialize(json) {
++  return json.struct(
++    "struct Order",
++    [["items", $json.vec(itemDeserialize_deserialize)]],
++    ([items]) => ({ items }),
++  );
++}
++
++/**
++ * An `Order`, or where in it the text went wrong: of
++ * `{"items":[{"qty":1},{"qty":-1}]}`, `items[1].qty: invalid value: ..`.
++ */
++export function parse(text) {
++  const reader = new $JsonReader(text);
++  const result = $jsonPathRead(reader, orderDeserialize_deserialize);
++  return result.TAG === "Err" ? { TAG: "Err", _0: $displayJsonPathError(result._0) } : result;
++}
++```
++
+ A hand-written `Serialize` or `Deserialize` is its body over serde_json's
+ writer and reader, `s.serialize_str(x)` the writer's `s.string(x)`. A
+ protocol call's `Result` the impl only gives on by `?`, or returns, is its
+diff --git a/docs/guide/libraries/crates-io.md b/docs/guide/libraries/crates-io.md
+index 64aadfff2..b1c711b80 100644
+--- a/docs/guide/libraries/crates-io.md
++++ b/docs/guide/libraries/crates-io.md
+@@ -111,7 +111,8 @@ and rust-js writes their API as JS's own
+ ([ADR 0423](../../decisions/0423-hashbrowns-maps-are-stds.md),
+ [ADR 0424](../../decisions/0424-indexmaps-maps-are-js-maps.md),
+ [ADR 0529](../../decisions/0529-a-shipped-memchr-searches-bytes.md),
+-[ADR 1185](../../decisions/1185-getrandom-is-a-shipped-crate.md)):
++[ADR 1185](../../decisions/1185-getrandom-is-a-shipped-crate.md),
++[ADR 1188](../../decisions/1188-serde-path-to-error-is-a-shipped-crate.md)):
+ 
+ | Crate | In JS |
+ |---|---|
+@@ -120,6 +121,7 @@ and rust-js writes their API as JS's own
+ | `indexmap` | its `IndexMap` and `IndexSet` are a `Map` and a `Set`, its methods by place, `get_index`, `swap_remove`, the runtime's |
+ | `memchr` 2.8.3, crates.io's | its searches are the runtime's, over the byte arrays slices are, `memchr` being `indexOf` |
+ | `getrandom` 0.1.16, 0.2.17, 0.3.4 and 0.4.3, crates.io's | its fills and numbers are Web Crypto's `crypto.getRandomValues`, whatever features you chose; its `Error` is its code, shown as that version shows it |
++| `serde_path_to_error` 0.1.20, crates.io's | its `deserialize` of serde_json's reader of text is the runtime's reader, keeping where in the value it is; its `Error` says so as the crate does, `items[1].qty: ..` ([serde](README.md#serde)) |
+ 
+ ```toml
+ [dependencies]
+@@ -160,8 +162,9 @@ export function counts(words) {
+ ```
+ 
+ What one of these has that rust-js doesn't write is refused where it's
+-called, `memchr::memmem::find` and getrandom 0.4's `SysRng` among them. A
+-`memchr` or `getrandom` of another version, a fork, or one by path or git
++called, `memchr::memmem::find`, getrandom 0.4's `SysRng` and
++serde_path_to_error's own `Track` among them. A `memchr`, `getrandom` or
++`serde_path_to_error` of another version, a fork, or one by path or git
+ is its types alone, and a call into it says which to depend on: `cargo
+ update -p getrandom --precise 0.2.17`, the qualified version your
+ requirement takes.
+diff --git a/docs/guide/limitations.md b/docs/guide/limitations.md
+index 6475da640..7d8107aac 100644
+--- a/docs/guide/limitations.md
++++ b/docs/guide/limitations.md
+@@ -264,7 +264,8 @@ for a `Value`;
+ `Value::pointer`, `pointer_mut` and `take`, assigning to a `Value`'s key,
+ and collecting into one; `Map::clear` and `map::Entry::or_insert`;
+ `to_vec`, `to_writer`, `from_slice`, `from_reader` and streams of values,
+-serde_json's own `Deserializer`, `Deserializer::from_str` (#1626); an
++serde_json's own `Deserializer` but `from_str`'s, which a type's
++`deserialize` and serde_path_to_error read, its `end` among them (#1626); an
+ `Error`'s `line`, `column`, `is_syntax` and `classify` (#1627);
+ `#[serde(field_identifier)]`, `#[serde(variant_identifier)]` and
+ `#[serde(crate = ..)]` (#1628); `#[serde(remote = ..)]` (#1615);
+diff --git a/scripts/mutations/lower/declarations/std_types.ts b/scripts/mutations/lower/declarations/std_types.ts
+index 41a1ec0f9..f03cba49f 100644
+--- a/scripts/mutations/lower/declarations/std_types.ts
++++ b/scripts/mutations/lower/declarations/std_types.ts
+@@ -52,4 +52,12 @@ export const mutations: Mutation[] = [
+     replace: "        matches!(self.of, Of::Cell { .. } | Of::JsonError)\n",
+     tests: ["test/declarations-json-error.test.ts", "test/std-package.test.ts", "-t", "JsonError|types are the catalog"],
+   },
++  {
++    name: "json-path-declared-as-error",
++    breaks: "a serde_path_to_error `Path` is declared its `Error`, so TypeScript takes one for the other",
++    file: "crates/rust-js-lower/src/declarations/std_types.rs",
++    find: "        Of::JsonPath(of) => json_path_def(tcx, did) == Some(of),\n",
++    replace: "        Of::JsonPath(_) => json_path_def(tcx, did).is_some(),\n",
++    tests: ["test/serde-path.test.ts", "-t", "declared std's opaque"],
++  },
+ ];
+diff --git a/scripts/mutations/lower/recognition/shipped.ts b/scripts/mutations/lower/recognition/shipped.ts
+index 20bc093d0..bcf66339b 100644
+--- a/scripts/mutations/lower/recognition/shipped.ts
++++ b/scripts/mutations/lower/recognition/shipped.ts
+@@ -36,4 +36,12 @@ export const mutations: Mutation[] = [
+     replace: "    (sites[\"jsonIndexKey\"].as_str().map(str::to_string))",
+     tests: ["test/binaries.test.ts", "-t", "a registry crate's panic names its own line"],
+   },
++  {
++    name: "json-path-reads-any-deserializer",
++    breaks: "serde_path_to_error's `deserialize` of a `Value` is taken as of serde_json's reader of text, where rust-js writes no read of one",
++    file: "crates/rust-js-lower/src/recognition/shipped.rs",
++    find: "        (tcx.def_kind(id) == DefKind::Fn && name.as_str() == \"deserialize\" && reads_text).then_some(JsonPathOp::Read)\n",
++    replace: "        (tcx.def_kind(id) == DefKind::Fn && name.as_str() == \"deserialize\" && (reads_text || true)).then_some(JsonPathOp::Read)\n",
++    tests: ["test/serde-path.test.ts", "-t", "are refused"],
++  },
+ ];
+diff --git a/scripts/mutations/lower/shipped.ts b/scripts/mutations/lower/shipped.ts
+index e6f71f122..51036296a 100644
+--- a/scripts/mutations/lower/shipped.ts
++++ b/scripts/mutations/lower/shipped.ts
+@@ -36,4 +36,12 @@ export const mutations: Mutation[] = [
+     replace: "",
+     tests: ["test/shipped-crates.test.ts", "-t", "getrandom's API runs"],
+   },
++  {
++    name: "json-path-inner-is-path",
++    breaks: "an `Error`'s `inner()` gives its path's segments, not serde_json's error",
++    file: "crates/rust-js-lower/src/shipped.rs",
++    find: "            JsonPathOp::Inner => Expr::member(given, \"original\"),\n",
++    replace: "            JsonPathOp::Inner => Expr::member(given, \"path\"),\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
+ ];
+diff --git a/scripts/mutations/lower/traits/dyns.ts b/scripts/mutations/lower/traits/dyns.ts
+index c4c0c0095..32818065f 100644
+--- a/scripts/mutations/lower/traits/dyns.ts
++++ b/scripts/mutations/lower/traits/dyns.ts
+@@ -668,4 +668,12 @@ export const mutations: Mutation[] = [
+     replace: "        if let Some(version) = self.recognition().getrandom_error(ty).filter(|_| false) {\n            let args = vec![Expr::str(self.type_id_key(ty)), Expr::str(version.key())];\n",
+     tests: ["test/shipped-crates.test.ts", "-t", "getrandom's API runs"],
+   },
++  {
++    name: "json-path-error-dyn-as-json-error",
++    breaks: "a serde_path_to_error `Error` boxed as a `dyn Error` is shown as serde_json's, its path dropped",
++    file: "crates/rust-js-lower/src/traits/dyns.rs",
++    find: "                \"$jsonPathErrorDyn\"\n",
++    replace: "                \"$jsonErrorDyn\"\n",
++    tests: ["test/serde-path.test.ts", "-t", "shown as the crate"],
++  },
+ ];
+diff --git a/scripts/mutations/runtime/json_content.ts b/scripts/mutations/runtime/json_content.ts
+index e07249ce4..f2f3ba21e 100644
+--- a/scripts/mutations/runtime/json_content.ts
++++ b/scripts/mutations/runtime/json_content.ts
+@@ -170,4 +170,76 @@ export const mutations: Mutation[] = [
+     replace: "    return visitor.none();\n",
+     tests: ["test/serde-protocol.test.ts", "-t", "a visitor's deserialize_option is each reader's own"],
+   },
++  {
++    name: "json-path-item-index-unmoved",
++    breaks: "each item of a tracked read is at index 0, `items[0].qty` of the second item's mistake",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    chain.push(this.index++);\n",
++    replace: "    chain.push(this.index);\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-next-key-unplaced",
++    breaks: "a mistake finding a tracked read's next key is the object's own, `customer: key must be a string`, where serde_path_to_error says `customer.?`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    chain.push(null);\n    const more = this.hasNextKey();\n",
++    replace: "    const more = this.hasNextKey();\n    if (more) chain.push(null);\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-object-end-kept",
++    breaks: "an object's end leaves its unread key's `?` in the path, so a missing field is at `customer.?`, not `customer`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    if (!more) chain.pop();\n",
++    replace: "",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-key-text-uncaptured",
++    breaks: "a tracked read's key of text isn't kept, so its value's mistake is at `customer.?`, not `customer.email`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    this.reader.captureKey(key);\n    return key;\n",
++    replace: "    return key;\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-value-at-object",
++    breaks: "a tracked read's value is at its object, `customer`, not its key, `customer.email`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    chain.push(this.keyRead);\n",
++    replace: "    chain.push(this.keyRead);\n    chain.pop();\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-colon-at-key",
++    breaks: "a missing `:` is at the key it follows, `customer`, where serde_path_to_error says the object's, none",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "  value(read) {\n    this.reader.parseObjectColon();\n    const chain = this.reader.chain;\n    if (!chain) return read(this.reader);\n    chain.push(this.keyRead);\n    try {\n      return read(this.reader);",
++    replace: "  value(read) {\n    const chain = this.reader.chain;\n    if (!chain) {\n      this.reader.parseObjectColon();\n      return read(this.reader);\n    }\n    chain.push(this.keyRead);\n    try {\n      this.reader.parseObjectColon();\n      return read(this.reader);",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-unknown-field-at-object",
++    breaks: "a `deny_unknown_fields` struct's unknown field is at the struct, `customer`, where serde_path_to_error says `customer.extra`, its identifier read as its key is",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    const key = this.text();\n    const i = $jsonField(key, fields, deny);\n    return this.read([{ type: \"str\", value: key, borrowed: !this.reader.escaped }, i]);\n",
++    replace: "    const key = this.read(this.text());\n    const i = $jsonField(key, fields, deny);\n    return [{ type: \"str\", value: key, borrowed: !this.reader.escaped }, i];\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-bool-key-uncaptured",
++    breaks: "a `bool` key isn't kept, so its value's mistake is at `flags.?`, not `flags.true`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "        reader.parseIdent('rue\"');\n        reader.captureKey(\"true\");\n",
++    replace: "        reader.parseIdent('rue\"');\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-number-key-uncaptured",
++    breaks: "a number key isn't kept, so its value's mistake is at `counts.?`, not `counts.7`",
++    file: "crates/rust-js-program/src/runtime/json_content.js",
++    find: "    reader.keying = reader.chain !== undefined;\n",
++    replace: "    reader.keying = false;\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
+ ];
+diff --git a/scripts/mutations/runtime/json_fail.ts b/scripts/mutations/runtime/json_fail.ts
+index 0b67d2487..a7fe0da13 100644
+--- a/scripts/mutations/runtime/json_fail.ts
++++ b/scripts/mutations/runtime/json_fail.ts
+@@ -18,4 +18,12 @@ export const mutations: Mutation[] = [
+     replace: "  return { message: e.message, line: e.line };\n",
+     tests: ["test/declarations-json-error.test.ts"],
+   },
++  {
++    name: "json-path-error-shares-chain",
++    breaks: "an error keeps the reader's place itself, not a copy, so the path it shows is where the reader went after, the root's",
++    file: "crates/rust-js-program/src/runtime/json_fail.js",
++    find: "    if ($JsonError.chain) this.path = $JsonError.chain.slice();\n",
++    replace: "    if ($JsonError.chain) this.path = $JsonError.chain;\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
+ ];
+diff --git a/scripts/mutations/runtime/json_path.ts b/scripts/mutations/runtime/json_path.ts
+new file mode 100644
+index 000000000..03d5df6c9
+--- /dev/null
++++ b/scripts/mutations/runtime/json_path.ts
+@@ -0,0 +1,45 @@
++// Mutations of crates/rust-js-program/src/runtime/json_path.js (ADR 1188).
++import type { Mutation } from "../../mutations";
++
++export const mutations: Mutation[] = [
++  {
++    name: "json-path-index-dotted",
++    breaks: "an index is shown after a dot, `items.[1].qty`, where the crate writes `items[1].qty`",
++    file: "crates/rust-js-program/src/runtime/json_path.js",
++    find: "    if (typeof segment === \"number\") {\n      f.write(\"[\");",
++    replace: "    if (typeof segment === \"number\") {\n      f.write(separator);\n      f.write(\"[\");",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-root-blank",
++    breaks: "the root's path, none, is shown as nothing, where the crate's `Path` shows `.`",
++    file: "crates/rust-js-program/src/runtime/json_path.js",
++    find: "  if (path.length === 0) return f.write(\".\");\n",
++    replace: "  if (path.length === 0) return;\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-unknown-shown",
++    breaks: "an error at the root, or at a key that isn't text, shows its path, `.: expected` or `?: EOF`, where the crate shows serde_json's error alone",
++    file: "crates/rust-js-program/src/runtime/json_path.js",
++    find: "  if (!e.path.every((segment) => segment === null)) {\n",
++    replace: "  if (true) {\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-variant-debugged-as-key",
++    breaks: "a variant's segment is shown `Map { key: \"circle\" }`, where the crate's derived `Debug` shows `Enum { variant: \"circle\" }`",
++    file: "crates/rust-js-program/src/runtime/json_path.js",
++    find: "  const segment = (g, s) => {\n    if (s === null) return g.write(\"Unknown\");\n",
++    replace: "  const segment = (g, s) => {\n    if (s === null) return g.write(\"Unknown\");\n    if (s.variant !== undefined) s = s.variant;\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-index-debug-unoptioned",
++    breaks: "`{:x?}` of a path shows its index in decimal, where the derived `Debug` gives its field the `Formatter`'s options",
++    file: "crates/rust-js-program/src/runtime/json_path.js",
++    find: "  const index = (g, n) => $writeDebugInteger(g, n, n.toString(16), n.toString(16).toUpperCase(), options);\n",
++    replace: "  const index = (g, n) => $writeInteger(g, n);\n",
++    tests: ["test/serde-path.test.ts", "-t", "shown as the crate"],
++  },
++];
+diff --git a/scripts/mutations/runtime/json_reader.ts b/scripts/mutations/runtime/json_reader.ts
+index d1277347d..bd1364aeb 100644
+--- a/scripts/mutations/runtime/json_reader.ts
++++ b/scripts/mutations/runtime/json_reader.ts
+@@ -218,4 +218,28 @@ export const mutations: Mutation[] = [
+     replace: "",
+     tests: ["test/serde-std.test.ts", "-t", "an i128, a u128 and a Saturating"],
+   },
++  {
++    name: "json-path-float-key-captured",
++    breaks: "a float key is kept, `counts.1.5`, where serde_path_to_error keeps none of one, `counts.?`",
++    file: "crates/rust-js-program/src/runtime/json_reader.js",
++    find: "    if (this.keying && n.kind !== \"f\") this.captureKey(String(n.value));\n",
++    replace: "    if (this.keying) this.captureKey(String(n.value));\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-variant-unplaced",
++    breaks: "what a variant holds is at its enum, `shape.radius`, not `shape.circle.radius`",
++    file: "crates/rust-js-program/src/runtime/json_reader.js",
++    find: "    this.chain.push({ variant: this.variantText });\n    try {\n      return read();\n    } finally {\n      this.chain.pop();\n    }\n",
++    replace: "    return read();\n",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
++  {
++    name: "json-path-placed-error-unplaced",
++    breaks: "a visitor's mistake, placed where the reader is, loses where in the value it was made, `point: invalid length 1` shown as the root's",
++    file: "crates/rust-js-program/src/runtime/json_reader.js",
++    find: "    fixed.path = e.path;\n",
++    replace: "",
++    tests: ["test/serde-path.test.ts", "-t", "says where"],
++  },
+ ];
+diff --git a/serde/Cargo.lock b/serde/Cargo.lock
+index ab86caa80..79d976e10 100644
+--- a/serde/Cargo.lock
++++ b/serde/Cargo.lock
+@@ -80,6 +80,7 @@ dependencies = [
+  "memchr",
+  "serde",
+  "serde_json",
++ "serde_path_to_error",
+ ]
+ 
+ [[package]]
+@@ -125,6 +126,17 @@ dependencies = [
+  "zmij",
+ ]
+ 
++[[package]]
++name = "serde_path_to_error"
++version = "0.1.20"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
++dependencies = [
++ "itoa",
++ "serde",
++ "serde_core",
++]
++
+ [[package]]
+ name = "syn"
+ version = "3.0.6"
+diff --git a/serde/Cargo.toml b/serde/Cargo.toml
+index 6c686993b..2384fdfd6 100644
+--- a/serde/Cargo.toml
++++ b/serde/Cargo.toml
+@@ -16,6 +16,7 @@ serde_json = "1"
+ hashbrown = "=0.17.1"
+ indexmap = "=2.14.2"
+ memchr = "=2.8.3"
++serde_path_to_error = "=0.1.20"
+ 
+ # Its library uses none of them: it's here to build them, which Cargo
+ # 1.100's lint of an unused dependency would warn of each time.
+diff --git a/serde/flags.ts b/serde/flags.ts
+index 06a7739ad..0879a32b4 100644
+--- a/serde/flags.ts
++++ b/serde/flags.ts
+@@ -14,7 +14,7 @@ import { dirname, resolve, sep } from "node:path";
+ const [profile, extension] = process.argv.slice(2);
+ if (!profile || !extension) throw new Error("usage: bun serde/flags.ts <profile dir> <extension>");
+ const within = resolve(profile) + sep;
+-const asked = ["serde", "serde_json", "hashbrown", "indexmap", "memchr"];
++const asked = ["serde", "serde_json", "hashbrown", "indexmap", "memchr", "serde_path_to_error"];
+ const files = new Map<string, string>();
+ const dirs = new Set<string>();
+ for (const line of (await Bun.stdin.text()).split("\n").filter(Boolean)) {
+diff --git a/src/cargo.rs b/src/cargo.rs
+index 069e039ef..9a1ee4a5e 100644
+--- a/src/cargo.rs
++++ b/src/cargo.rs
+@@ -101,9 +101,9 @@ impl Qualified {
+ /// The crates of crates.io's rust-js reads as rustc builds them: serde's
+ /// (ADR 0077), and hashbrown, with what it alone uses, and indexmap, whose
+ /// maps are std's (ADRs 0423, 0424); and memchr, whose searches rust-js
+-/// writes (ADR 0529), and getrandom, whose bytes it writes (#2326). The one
+-/// catalog.
+-const READ_AS_RUSTC_BUILDS_THEM: [ReadAsRustc; 9] = [
++/// writes (ADR 0529), getrandom, whose bytes it writes (#2326), and
++/// serde_path_to_error, whose read it writes (ADR 1188). The one catalog.
++const READ_AS_RUSTC_BUILDS_THEM: [ReadAsRustc; 10] = [
+     ReadAsRustc {
+         name: "serde",
+         qualified: None,
+@@ -140,6 +140,16 @@ const READ_AS_RUSTC_BUILDS_THEM: [ReadAsRustc; 9] = [
+             unless: &[],
+         }]),
+     },
++    // Its read, the path it keeps and its `Error` are the runtime's, of
++    // this version's rules (ADR 1188).
++    ReadAsRustc {
++        name: "serde_path_to_error",
++        qualified: Some(&[Qualified {
++            version: "0.1.20",
++            cfgs: &[],
++            unless: &[],
++        }]),
++    },
+     // 0.1 takes its always-failing backend on rust-js's target with none
+     // chosen; 0.2 refuses it but for its `custom` feature, which its `js`
+     // feature's backend comes before; 0.3 and 0.4 but for their
+diff --git a/std/index.d.ts b/std/index.d.ts
+index e33f6299f..8a14c8e5f 100644
+--- a/std/index.d.ts
++++ b/std/index.d.ts
+@@ -22,6 +22,18 @@ export interface JsonError {
+   readonly column: number;
+ }
+ 
++declare const jsonPathError: unique symbol;
++/** A `serde_path_to_error::Error<serde_json::Error>`: serde_json's error, and where in the value it was made, which Rust's `path()`, `inner()` and `Display` read (ADR 1188). */
++export interface JsonPathError {
++  readonly [jsonPathError]: never;
++}
++
++declare const jsonPath: unique symbol;
++/** A `serde_path_to_error::Path`: where in a value a read failed, its `Display` `items[1].qty` (ADR 1188). */
++export interface JsonPath {
++  readonly [jsonPath]: never;
++}
++
+ /** A `DoubleEndedIterator`: a JS iterator that knows its back, `back()` its last item, as `next()` its first (#1999). */
+ export interface DoubleEndedIterator<T> extends IterableIterator<T> {
+   back(): IteratorResult<T>;
+diff --git a/std/runtime.js b/std/runtime.js
+index dc399b8ab..ace3f63b9 100644
+--- a/std/runtime.js
++++ b/std/runtime.js
+@@ -7491,10 +7491,17 @@ export function $lazyScan(items, init, f, handle = true, drop = undefined) {
+ }
+ 
+ export class $JsonError extends Error {
++  // Of a read serde_path_to_error tracks, where in the value it is: the
++  // reader's place's segments (`$jsonPathRead`, ADR 1188).
++  static chain = undefined;
++
+   constructor(message, line = 0, column = 0) {
+     super(message);
+     this.line = line;
+     this.column = column;
++    // Where the reader was as it was made, serde_path_to_error's `Track`,
++    // whose path is the first place a mistake reached.
++    if ($JsonError.chain) this.path = $JsonError.chain.slice();
+   }
+ }
+ export function $jsonError(message) {
+@@ -16764,9 +16771,7 @@ export class $JsonDecoder {
+     const seen = new Array(fields.length).fill(false);
+     const kept = [];
+     while (map.next()) {
+-      const keyContent = map.key().content();
+-      const key = keyContent.value;
+-      const i = $jsonField(key, fields, deny && !flatten);
++      const [keyContent, i] = map.key().field(fields, deny && !flatten);
+       if (i < 0 && flatten) {
+         kept.push([keyContent, map.value((json) => json.content())]);
+         continue;
+@@ -16949,6 +16954,26 @@ export class $JsonReader extends $JsonDecoder {
+     this.bytes = new TextEncoder().encode(text);
+     this.index = 0;
+     this.remainingDepth = 128;
++    // Of a read serde_path_to_error tracks, where in the value it is, each
++    // place's segment (`$jsonPathRead`, ADR 1188); and whether it reads a
++    // key's number, whose digits are the key.
++    this.chain = undefined;
++    this.keying = false;
++    this.variantText = undefined;
++  }
++
++  // A key read, as serde_path_to_error's `CaptureKey` keeps it: where the
++  // rest of the key's reading is, and its value's place.
++  captureKey(key) {
++    const chain = this.chain;
++    if (chain) chain[chain.length - 1] = key;
++  }
++
++  // A number read as a key: its digits, an integer's, are the key; a
++  // float's aren't, as serde_path_to_error keeps none of one.
++  captureNumber(n) {
++    if (this.keying && n.kind !== "f") this.captureKey(String(n.value));
++    return n;
+   }
+ 
+   // The next byte, or -1 at the end.
+@@ -16978,8 +17003,12 @@ export class $JsonReader extends $JsonDecoder {
+ 
+   // `fix_position`: a visitor's message has no place, until it gets where
+   // the reader is.
++  // The same error placed, at the place in the value it was made.
+   fixPosition(e) {
+-    return e instanceof $JsonError && e.line === 0 ? this.error(e.message) : e;
++    if (!(e instanceof $JsonError) || e.line !== 0) return e;
++    const fixed = this.error(e.message);
++    fixed.path = e.path;
++    return fixed;
+   }
+ 
+   end() {
+@@ -17044,9 +17073,9 @@ export class $JsonReader extends $JsonDecoder {
+     try {
+       if (peek === 45) {
+         this.index++;
+-        return visit(this.parseInteger(false));
++        return visit(this.captureNumber(this.parseInteger(false)));
+       }
+-      if (peek >= 48 && peek <= 57) return visit(this.parseInteger(true));
++      if (peek >= 48 && peek <= 57) return visit(this.captureNumber(this.parseInteger(true)));
+       throw this.peekInvalidType(expected);
+     } catch (e) {
+       throw this.fixPosition(e);
+@@ -17076,6 +17105,7 @@ export class $JsonReader extends $JsonDecoder {
+     const digits = BigInt(new TextDecoder().decode(this.bytes.subarray(start, this.index)));
+     const value = negative ? -digits : digits;
+     if (value < min || value > max) throw this.error("number out of range");
++    this.captureNumber({ kind: "i", value });
+     if (nonZero && value === 0n) throw this.error(`invalid value: integer \`0\`, expected a nonzero ${type}`);
+     return value;
+   }
+@@ -17692,9 +17722,15 @@ export class $JsonReader extends $JsonDecoder {
+   // `deserialize_enum`: `"Name"`, or `{"Name": ..}`. `visit` gets the
+   // variant's name and a `$JsonVariant` to read what it holds. `enumName` is
+   // the enum's, for a flattened one.
++  // Of a read serde_path_to_error tracks, what a variant holds is at its
++  // name's text, `shape.circle`; its name's own mistakes the enum's.
+   enum(enumName, variants, visit, other) {
+     const peek = this.parseWhitespace();
+-    if (peek === 34) return visit(this.identifier(variants, other), new $JsonVariant(this, true));
++    if (peek === 34) {
++      const name = this.identifier(variants, other);
++      const variant = new $JsonVariant(this, true);
++      return this.chain ? this.within(() => visit(name, variant)) : visit(name, variant);
++    }
+     if (peek !== 123) throw this.peekError(peek === -1 ? "EOF while parsing a value" : "expected value");
+     if (--this.remainingDepth === 0) throw this.peekError("recursion limit exceeded");
+     this.index++;
+@@ -17708,7 +17744,8 @@ export class $JsonReader extends $JsonDecoder {
+       }
+       const name = this.identifier(variants, other);
+       this.parseObjectColon();
+-      value = visit(name, new $JsonVariant(this, false));
++      const variant = new $JsonVariant(this, false);
++      value = this.chain ? this.within(() => visit(name, variant)) : visit(name, variant);
+     } finally {
+       this.remainingDepth++;
+     }
+@@ -17720,9 +17757,20 @@ export class $JsonReader extends $JsonDecoder {
+     throw this.error(c === -1 ? "EOF while parsing an object" : "expected value");
+   }
+ 
+-  // A variant's name, from a string.
++  // `read()` at the variant just named, of a read serde_path_to_error
++  // tracks.
++  within(read) {
++    this.chain.push({ variant: this.variantText });
++    try {
++      return read();
++    } finally {
++      this.chain.pop();
++    }
++  }
++
++  // A variant's name, from a string, whose text a tracked read's place is.
+   identifier(variants, other) {
+-    return this.deserializeStr("variant identifier", (name) => $jsonVariantNamed(name, variants, other));
++    return this.deserializeStr("variant identifier", (name) => $jsonVariantNamed((this.variantText = name), variants, other));
+   }
+ }
+ 
+@@ -17861,6 +17909,7 @@ export class $JsonSeq {
+   constructor(reader) {
+     this.reader = reader;
+     this.first = true;
++    this.index = 0;
+   }
+ 
+   // `has_next_element`.
+@@ -17881,8 +17930,17 @@ export class $JsonSeq {
+     return true;
+   }
+ 
++  // Of a read serde_path_to_error tracks, the item is at its index:
++  // `items[1]`, its comma's and its `]`'s mistakes the sequence's own.
+   value(read) {
+-    return read(this.reader);
++    const chain = this.reader.chain;
++    if (!chain) return read(this.reader);
++    chain.push(this.index++);
++    try {
++      return read(this.reader);
++    } finally {
++      chain.pop();
++    }
+   }
+ 
+   // The `i`th of `expected`'s items.
+@@ -17930,8 +17988,20 @@ export class $JsonMap {
+     this.first = true;
+   }
+ 
+-  // `has_next_key`.
++  // Of a read serde_path_to_error tracks, the next key is `?` until its
++  // text is read, `a.?`, which a mistake finding it is at; its `}` the
++  // object's own.
+   next() {
++    const chain = this.reader.chain;
++    if (!chain) return this.hasNextKey();
++    chain.push(null);
++    const more = this.hasNextKey();
++    if (!more) chain.pop();
++    return more;
++  }
++
++  // `has_next_key`.
++  hasNextKey() {
+     const reader = this.reader;
+     const peek = reader.parseWhitespace();
+     if (peek === -1) throw reader.peekError("EOF while parsing an object");
+@@ -17951,12 +18021,21 @@ export class $JsonMap {
+   }
+ 
+   key() {
+-    return new $JsonKey(this.reader);
++    return new $JsonKey(this.reader, this);
+   }
+ 
++  // Of a read serde_path_to_error tracks, the value is at its key, `a.b`,
++  // or `a.?` of one that wasn't text; its `:` the object's own.
+   value(read) {
+     this.reader.parseObjectColon();
+-    return read(this.reader);
++    const chain = this.reader.chain;
++    if (!chain) return read(this.reader);
++    chain.push(this.keyRead);
++    try {
++      return read(this.reader);
++    } finally {
++      chain.pop();
++    }
+   }
+ }
+ 
+@@ -17990,28 +18069,52 @@ export class $JsonContentMap {
+ }
+ 
+ // `MapKey`: an object's key, from its opening quote. A number or a `bool`
+-// is read from inside the quotes.
++// is read from inside the quotes. Of a read serde_path_to_error tracks, the
++// key, once read, is where the rest of its reading is, its `CaptureKey`'s:
++// its text, a number's digits, or a `bool`'s word; each method ends its
++// reading, `read`, and the map keeps it for its value's place.
+ export class $JsonKey {
+-  constructor(reader) {
++  constructor(reader, map) {
+     this.reader = reader;
++    this.map = map;
+   }
+ 
+-  string() {
++  text() {
+     this.reader.index++;
+-    return this.reader.parseStr();
++    const key = this.reader.parseStr();
++    this.reader.captureKey(key);
++    return key;
++  }
++
++  read(value) {
++    const chain = this.reader.chain;
++    if (chain) this.map.keyRead = chain.pop();
++    return value;
++  }
++
++  string() {
++    return this.read(this.text());
+   }
+ 
+   char() {
+-    return $jsonChar(this.string());
++    return this.read($jsonChar(this.text()));
+   }
+ 
+   ignore() {
+-    this.string();
++    this.read(this.text());
+   }
+ 
+   content() {
+-    const value = this.string();
+-    return { type: "str", value, borrowed: !this.reader.escaped };
++    const value = this.text();
++    return this.read({ type: "str", value, borrowed: !this.reader.escaped });
++  }
++
++  // A struct's field it names, as serde's derived identifier reads it:
++  // an unknown one's mistake, `deny_unknown_fields`', at the key.
++  field(fields, deny) {
++    const key = this.text();
++    const i = $jsonField(key, fields, deny);
++    return this.read([{ type: "str", value: key, borrowed: !this.reader.escaped }, i]);
+   }
+ 
+   number(read) {
+@@ -18019,10 +18122,12 @@ export class $JsonKey {
+     reader.index++;
+     const c = reader.peek();
+     if (!(c === 45 || (c >= 48 && c <= 57))) throw reader.error("invalid value: expected key to be a number in quotes");
++    reader.keying = reader.chain !== undefined;
+     const value = read(reader);
++    reader.keying = false;
+     if (reader.peek() !== 34) throw reader.peekError('expected `"`');
+     reader.index++;
+-    return value;
++    return this.read(value);
+   }
+ 
+   bool() {
+@@ -18033,12 +18138,15 @@ export class $JsonKey {
+       if (c === -1) throw reader.peekError("EOF while parsing a value");
+       if (c === 116) {
+         reader.parseIdent('rue"');
+-        return true;
++        reader.captureKey("true");
++        return this.read(true);
+       }
+       if (c === 102) {
+         reader.parseIdent('alse"');
+-        return false;
++        reader.captureKey("false");
++        return this.read(false);
+       }
++      // Not visited: serde_json's own mistake, which isn't the key's.
+       throw $jsonError(`invalid type: string ${$debugStr(reader.parseStr())}, expected a boolean`);
+     } catch (e) {
+       throw reader.fixPosition(e);
+@@ -18053,6 +18161,11 @@ export class $JsonContentKey {
+     this.key = new $JsonContent(key, owned);
+   }
+ 
++  field(fields, deny) {
++    const key = this.content();
++    return [key, $jsonField(key.value, fields, deny)];
++  }
++
+   string() {
+     return this.key.string();
+   }
+@@ -18501,6 +18614,11 @@ export class $JsonValueKey {
+     return { type: "str", value: this.key, borrowed: false };
+   }
+ 
++  field(fields, deny) {
++    const key = this.content();
++    return [key, $jsonField(key.value, fields, deny)];
++  }
++
+   number(read) {
+     const json = new $JsonReader(this.key);
+     const c = json.peek();
+@@ -19109,6 +19227,117 @@ export function $debugJsonError(e) {
+   return `Error(${$debugStr(e.message)}, line: ${e.line}, column: ${e.column})`;
+ }
+ 
++// serde_path_to_error, a crate rustc builds whose API rust-js writes (ADR
++// 1188): `deserialize(&mut serde_json::Deserializer::from_str(text))`, what
++// `read` reads at the reader's place, not to the text's end, as the crate's
++// `deserialize` reads it. Its error is the crate's `Error`, `{ path, original
++// }`: where in the value the reader was as the first mistake was made, the
++// crate's `Track`, then serde_json's error. A path is its segments: an item's
++// index, a number; a key's text, a string; a variant's name, `{ variant }`;
++// a key that isn't text, `null`, `?`. The reader keeps them as it reads
++// (`$JsonSeq`, `$JsonMap`, `$JsonKey` and `$JsonReader`'s `enum`), and each
++// `$JsonError` made meanwhile keeps a copy; a plain `serde_json::from_str`
++// keeps none.
++export function $jsonPathRead(json, read) {
++  const outer = $JsonError.chain;
++  json.chain = $JsonError.chain = [];
++  try {
++    return { TAG: "Ok", _0: read(json) };
++  } catch (e) {
++    if (!(e instanceof $JsonError)) throw e;
++    return { TAG: "Err", _0: { path: e.path ?? [], original: $jsonErrorOf(e) } };
++  } finally {
++    json.chain = undefined;
++    json.keying = false;
++    $JsonError.chain = outer;
++  }
++}
++
++// A `Path`'s `Display` into a writer, as the crate writes it: `.` of none;
++// else each segment, a key's or a variant's text `write!`'s `{}`, an index
++// `[{}]`'s pieces, a key that isn't text `?`, each but an index after its
++// separator, `""` of the first and `.` after.
++export function $writeJsonPath(f, path) {
++  if (path.length === 0) return f.write(".");
++  let separator = "";
++  for (const segment of path) {
++    if (typeof segment === "number") {
++      f.write("[");
++      $writeInteger(f, segment);
++      f.write("]");
++    } else {
++      f.write(separator);
++      f.write(segment === null ? "?" : (segment.variant ?? segment));
++    }
++    separator = ".";
++  }
++}
++// Its `Error`'s `Display` into a writer: its path's and `: `, unless the
++// path is none or only keys that aren't text, then serde_json's error's.
++// Neither reads the `Formatter`'s options, as `write!` doesn't.
++export function $writeJsonPathError(f, e) {
++  if (!e.path.every((segment) => segment === null)) {
++    $writeJsonPath(f, e.path);
++    f.write(": ");
++  }
++  $writeJsonError(f, e.original);
++}
++// Each's derived `Debug` into a writer: `Error { path, original }`, the
++// path `Path { segments }`, each segment `Seq { index }`, `Map { key }`,
++// `Enum { variant }` or `Unknown`, an index given the `Formatter`'s options,
++// serde_json's error its own `Debug`.
++export function $writeDebugJsonPath(f, path, options = {}) {
++  const pretty = options.alternate;
++  const index = (g, n) => $writeDebugInteger(g, n, n.toString(16), n.toString(16).toUpperCase(), options);
++  const segment = (g, s) => {
++    if (s === null) return g.write("Unknown");
++    if (typeof s === "number") return $writeDebugStruct(g, "Seq", [["index", s, index]], pretty);
++    if (typeof s === "string") return $writeDebugStruct(g, "Map", [["key", s, $writeDebugStr]], pretty);
++    $writeDebugStruct(g, "Enum", [["variant", s.variant, $writeDebugStr]], pretty);
++  };
++  const segments = (g, items) => $writeDebugList(g, items, segment, pretty);
++  $writeDebugStruct(f, "Path", [["segments", path, segments]], pretty);
++}
++export function $writeDebugJsonPathError(f, e, options = {}) {
++  const path = (g, p) => $writeDebugJsonPath(g, p, options);
++  const fields = [["path", e.path, path], ["original", e.original, $writeDebugJsonError]];
++  $writeDebugStruct(f, "Error", fields, options.alternate);
++}
++// Each as text, written as into a writer.
++export function $jsonPathText(write, ...args) {
++  let text = "";
++  const f = { write: (s) => void (text += s), writeChar: (c) => void (text += c), armed: false };
++  write(f, ...args);
++  return text;
++}
++export function $displayJsonPath(path) {
++  return $jsonPathText($writeJsonPath, path);
++}
++export function $displayJsonPathError(e) {
++  return $jsonPathText($writeJsonPathError, e);
++}
++export function $debugJsonPath(path, options) {
++  return $jsonPathText($writeDebugJsonPath, path, options);
++}
++export function $debugJsonPathError(e, options) {
++  return $jsonPathText($writeDebugJsonPathError, e, options);
++}
++
++// Its `Error`, of `TypeId` `type`, as a `dyn Error` (ADR 0141): shown as the
++// crate shows it; its `source()` serde_json's error's, as its `Error` impl's
++// is its `original`'s, which has none; its `type_id` `type` (ADR 0331).
++export function $jsonPathErrorDyn(type) {
++  return {
++    Debug: () => ({
++      fmt: (e, options) => $debugJsonPathError(e, options),
++      fmtInto: (f, e, options) => $writeDebugJsonPathError(f, e, options),
++    }),
++    Display: () => ({ fmt: $displayJsonPathError, fmtInto: (f, e) => $writeJsonPathError(f, e) }),
++    source: () => undefined,
++    typeId: () => type,
++  };
++}
++
+ // The checks of serde's own impls of std's types, a catalog row's (#1623,
+ // ADR 1134), each in serde's words.
+ 
+diff --git a/test/serde-path.test.ts b/test/serde-path.test.ts
+new file mode 100644
+index 000000000..aa8f95ffa
+--- /dev/null
++++ b/test/serde-path.test.ts
+@@ -0,0 +1,301 @@
++// serde_path_to_error, a crate rustc builds whose read rust-js writes (ADR
++// 1188): `deserialize(&mut serde_json::Deserializer::from_str(text))`, its
++// error where in the value it was made, `items[1].qty`, by the crate's
++// rules, at each place a path has one: a struct's field, a map's key of text,
++// a number or a `bool`, an item's index, a variant's name, a key not yet
++// read, and none for an `Option`, a newtype, a flattened field or an
++// internally tagged variant's content. Native serde_path_to_error is the
++// oracle, the same source and dependency versions as the JavaScript.
++import { beforeAll, expect, test } from "bun:test";
++import { readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { compiled, native } from "./serde-support";
++import { buildSerde } from "./serde-crate";
++import { buildCompiler, compiler, fixture, run } from "./support";
++import { es2022, repoTypes, type Setting, typeChecked } from "./type-checked";
++
++const checking: Setting = { ...es2022, ...repoTypes };
++
++beforeAll(() => {
++  buildCompiler();
++  buildSerde("rlib");
++}, 600_000);
++
++test("serde_path_to_error's read says where in the value it failed, as native serde_path_to_error does", async () => {
++  const dir = fixture("serde-path-to-error");
++  writeFileSync(join(dir, "cases.rs"), String.raw`
++use serde::Deserialize;
++use std::collections::{BTreeMap, HashMap};
++
++#[derive(Deserialize, Debug)]
++pub struct Item {
++    pub sku: Sku,
++    pub qty: u32,
++}
++
++#[derive(Deserialize, Debug)]
++pub struct Sku(pub String);
++
++#[derive(Deserialize, Debug)]
++#[serde(deny_unknown_fields)]
++pub struct Customer {
++    pub name: String,
++    pub email: String,
++}
++
++#[derive(Deserialize, Debug)]
++#[serde(rename_all = "lowercase")]
++pub enum Shape {
++    Circle { radius: f64 },
++    Square(f64),
++    Point,
++}
++
++#[derive(Deserialize, Debug)]
++#[serde(tag = "type", rename_all = "lowercase")]
++pub enum Tagged {
++    Circle { radius: f64 },
++}
++
++#[derive(Deserialize, Debug)]
++pub struct Base {
++    pub id: u32,
++}
++
++#[derive(Deserialize, Debug)]
++pub struct Order {
++    pub customer: Customer,
++    pub items: Vec<Item>,
++    #[serde(default)]
++    pub stock: BTreeMap<String, Item>,
++    #[serde(default)]
++    pub counts: HashMap<u32, u32>,
++    #[serde(default)]
++    pub flags: BTreeMap<bool, u32>,
++    #[serde(default)]
++    pub shape: Option<Shape>,
++    #[serde(default)]
++    pub tagged: Option<Tagged>,
++    #[serde(default)]
++    pub meta: Option<serde_json::Value>,
++    #[serde(default)]
++    pub point: Option<(u32, u32)>,
++    #[serde(default)]
++    pub orders: Vec<Order>,
++}
++
++#[derive(Deserialize, Debug)]
++pub struct Flat {
++    #[serde(flatten)]
++    pub base: Base,
++    pub name: String,
++}
++
++fn read<T: for<'de> Deserialize<'de> + std::fmt::Debug>(text: &str) -> String {
++    let reader = &mut serde_json::Deserializer::from_str(text);
++    match serde_path_to_error::deserialize::<_, T>(reader) {
++        Ok(value) => format!("ok {value:?}"),
++        Err(error) => format!(
++            "{error} | path {} | inner {} | {:?}",
++            error.path(),
++            error.inner(),
++            error,
++        ),
++    }
++}
++
++const ORDER: &str = r#"{"customer":{"name":"Ada","email":"a@b.c"},"items":[{"sku":"A1","qty":2}]"#;
++
++pub fn report() -> Vec<String> {
++    let with = |rest: &str| format!("{ORDER}{rest}");
++    let mut lines = vec![
++        read::<Order>(&with("}")),
++        read::<Order>(r#"{"customer":{"name":"Ada","email":"a@b.c"},"items":[{"sku":"A1","qty":2},{"sku":"B2","qty":-1}]}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada"},"items":[]}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada","email":7},"items":[]}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada","email":"a","extra":1},"items":[]}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada","name":"B","email":"a"},"items":[]}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada","email":"a"},"items":{}}"#),
++        read::<Order>(r#"{"customer":{"name":"Ada","email":"a"},"items":[{"sku":"A1","qty":1}]"#),
++        read::<Order>(r#"{"customer":{"name":"Ada", 5:1},"items":[]}"#),
++        read::<Order>(r#"{"customer" 1}"#),
++        read::<Order>("[]"),
++        read::<Order>(&with(r#","stock":{"A1":{"sku":"A1","qty":"x"}}}"#)),
++        read::<Order>(&with(r#","counts":{"7":-1}}"#)),
++        read::<Order>(&with(r#","counts":{"5000000000":1}}"#)),
++        read::<Order>(&with(r#","counts":{"x":1}}"#)),
++        read::<Order>(&with(r#","counts":{"1.5":1}}"#)),
++        read::<Order>(&with(r#","flags":{"x":1}}"#)),
++        read::<Order>(&with(r#","flags":{"true":"x"}}"#)),
++        read::<Order>(&with(r#","shape":{"circle":{"radius":"x"}}}"#)),
++        read::<Order>(&with(r#","shape":{"square":"x"}}"#)),
++        read::<Order>(&with(r#","shape":"circle"}"#)),
++        read::<Order>(&with(r#","shape":{"point":1}}"#)),
++        read::<Order>(&with(r#","shape":{"oval":1}}"#)),
++        read::<Order>(&with(r#","tagged":{"type":"circle","radius":"x"}}"#)),
++        read::<Order>(&with(r#","tagged":{"type":"oval"}}"#)),
++        read::<Order>(&with(r#","tagged":{"type":"circle","radius":[1,}}"#)),
++        read::<Order>(&with(r#","meta":{"a":[1,{"b":tru}]}}"#)),
++        read::<Order>(&with(r#","point":[1,"x"]}"#)),
++        read::<Order>(&with(r#","point":[1]}"#)),
++        read::<Order>(&with(r#","extra":[1,}"#)),
++        read::<Order>(&with(&format!(r#","orders":[{ORDER}}},{ORDER},"orders":[{{"customer":{{"name":"Bo","email":"b"}},"items":[{{"sku":"C","qty":true}}]}}]}}]}}"#))),
++        read::<Order>(&with("} trailing")),
++        read::<Vec<Item>>(r#"[{"sku":"A1","qty":1},{"sku":2,"qty":1}]"#),
++        read::<Vec<Item>>(r#"[{"sku":"A1","qty":1}"#),
++        read::<Flat>(r#"{"id":"x","name":"a"}"#),
++        read::<Flat>(r#"{"id":1}"#),
++        read::<HashMap<String, Vec<u8>>>(r#"{"a.b":[1,300]}"#),
++    ];
++    // The reader keeps its place: a second value is the text after the first.
++    let reader = &mut serde_json::Deserializer::from_str(r#"{"id":1} {"id":"x"}"#);
++    let first: Result<Base, _> = serde_path_to_error::deserialize(&mut *reader);
++    let second: Result<Base, _> = serde_path_to_error::deserialize(reader);
++    lines.push(format!("{first:?} {second:?}"));
++    // into_inner(), the serde_json error itself, and {:#?}.
++    let error = serde_path_to_error::deserialize::<_, Order>(&mut serde_json::Deserializer::from_str(r#"{"customer":{"name":"Ada","email":7},"items":[]}"#)).unwrap_err();
++    lines.push(format!("{error:#?}"));
++    let path = error.path().to_string();
++    let inner: serde_json::Error = error.into_inner();
++    lines.push(format!("{path} / {inner} / {:?} / {}", inner, inner.to_string().len()));
++    lines
++}
++`);
++  const expected = run([native(dir)]);
++  const { report } = await compiled(dir);
++  expect(JSON.stringify(report())).toBe(expected.trim());
++}, 300_000);
++
++// Its `Error` as the crate shows it everywhere a program shows one: given a
++// `Formatter`'s options, which its `Display` doesn't read and a path's index
++// does; written into a writer, a piece at a time; boxed as a `dyn Error`; a
++// root's path none. And the reader `from_str` makes read by a type's own
++// `deserialize`, value after value, as serde_json reads it.
++test("serde_path_to_error's error is shown as the crate shows it, and its reader read as serde_json's", async () => {
++  const dir = fixture("serde-path-to-error-shown");
++  writeFileSync(join(dir, "cases.rs"), String.raw`use serde::Deserialize;
++use std::fmt;
++
++#[derive(Deserialize, Debug)]
++pub struct Item {
++    pub qty: u32,
++}
++
++pub fn parse(text: &str) -> Result<Item, serde_path_to_error::Error<serde_json::Error>> {
++    serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(text))
++}
++
++fn boxed(text: &str) -> Result<Item, Box<dyn std::error::Error>> {
++    Ok(parse(text)?)
++}
++
++struct Shown<'a>(&'a serde_path_to_error::Error<serde_json::Error>);
++impl fmt::Display for Shown<'_> {
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        write!(f, "<{}|{:?}|{}>", self.0, self.0.path(), self.0.path())
++    }
++}
++
++fn direct(text: &str) -> String {
++    let mut reader = serde_json::Deserializer::from_str(text);
++    let first = Item::deserialize(&mut reader).map_err(|e| e.to_string());
++    let second = Item::deserialize(&mut reader).map_err(|e| e.to_string());
++    format!("{first:?} {second:?}")
++}
++
++pub fn report() -> Vec<String> {
++    let bad = r#"{"qty":[1]}"#;
++    let e = parse(bad).unwrap_err();
++    let b = boxed(bad).unwrap_err();
++    vec![
++        format!("[{:>60}] [{:x?}] [{:#x?}]", e, e.path(), e.path()),
++        format!("{b} / {b:?} / {}", std::error::Error::source(&*b).is_none()),
++        Shown(&e).to_string(),
++        format!("{:?}", parse("[").unwrap_err()),
++        {
++            let reader = &mut serde_json::Deserializer::from_str(r#"[0,1,2,3,4,5,6,7,8,9,10,"x"]"#);
++            let e = serde_path_to_error::deserialize::<_, Vec<u32>>(reader).unwrap_err();
++            format!("{} {:?} {:x?} {:#X?}", e.path(), e.path(), e.path(), e.path())
++        },
++        direct(r#"{"qty":1} {"qty":2} x"#),
++        direct(r#"{"qty":"a"}"#),
++        direct("[1]"),
++    ]
++}
++`);
++  const expected = run([native(dir)]);
++  const { report } = await compiled(dir);
++  expect(JSON.stringify(report())).toBe(expected.trim());
++}, 300_000);
++
++// What rust-js doesn't write of either is refused where it's called:
++// serde_json's reader's other methods (#1626), serde_path_to_error's own
++// tracking and its path's segments, and its read of anything but serde_json's
++// reader of text.
++test("serde_path_to_error and serde_json's reader, where rust-js doesn't write them, are refused", () => {
++  const dir = fixture("serde-path-to-error-refused");
++  const refusal = (body: string) => {
++    writeFileSync(join(dir, "lib.rs"), `use serde::Deserialize;\n#[derive(Deserialize)]\npub struct Item {\n    pub qty: u32,\n}\npub fn f(t: &str) -> String {\n    ${body}\n}\n`);
++    const p = Bun.spawnSync([compiler, join(dir, "lib.rs"), "-o", join(dir, "lib.js"), "--", "--edition=2024", "--crate-type=lib", ...buildSerde()]);
++    expect(p.exitCode).not.toBe(0);
++    return p.stderr.toString();
++  };
++  expect(refusal("serde_json::Deserializer::from_str(t).end().is_ok().to_string()")).toContain(
++    "rust-js does not support calling `serde_json::Deserializer::<R>::end` (#1626)",
++  );
++  expect(refusal("let mut track = serde_path_to_error::Track::new();\n    let mut de = serde_json::Deserializer::from_str(t);\n    let _ = Item::deserialize(serde_path_to_error::Deserializer::new(&mut de, &mut track));\n    track.path().to_string()")).toContain(
++    "rust-js does not support calling `serde_path_to_error::Track::new`",
++  );
++  expect(refusal("let e = serde_path_to_error::deserialize::<_, Item>(&mut serde_json::Deserializer::from_str(t)).err().unwrap();\n    e.path().iter().count().to_string()")).toContain(
++    "rust-js does not support calling `serde_path_to_error::Path::iter`",
++  );
++  expect(refusal("serde_path_to_error::deserialize::<_, Item>(serde_json::json!({ \"qty\": 1 })).is_ok().to_string()")).toContain(
++    "rust-js does not support calling `serde_path_to_error::deserialize`",
++  );
++}, 300_000);
++
++// A crate's declarations of its `Error` and `Path`: `@rust-js/std`'s opaque
++// `JsonPathError` and `JsonPath`, not `any`, which TypeScript takes only of
++// what rust-js gave (ADR 1149), and gives back for Rust to read.
++test("serde_path_to_error's Error and Path are declared std's opaque types", async () => {
++  const dir = fixture("serde-path-to-error-declared");
++  writeFileSync(join(dir, "lib.rs"), `use serde::Deserialize;
++
++#[derive(Deserialize)]
++pub struct Point {
++    pub x: f64,
++}
++
++pub fn parse(text: &str) -> Result<Point, serde_path_to_error::Error<serde_json::Error>> {
++    serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(text))
++}
++
++pub fn path(error: &serde_path_to_error::Error<serde_json::Error>) -> &serde_path_to_error::Path {
++    error.path()
++}
++
++pub fn shown(path: &serde_path_to_error::Path) -> String {
++    path.to_string()
++}
++`);
++  run([compiler, "--declarations", join(dir, "lib.rs"), "-o", join(dir, "lib.js"), "--", ...buildSerde()]);
++  const declarations = readFileSync(join(dir, "lib.d.ts"), "utf8");
++  expect(declarations).toContain('import type { JsonPath, JsonPathError } from "@rust-js/std";');
++  expect(declarations).toContain("_0: JsonPathError;");
++  expect(declarations).toContain("export function path(error: JsonPathError): JsonPath;");
++  expect(declarations).not.toContain("any");
++  writeFileSync(join(dir, "use.ts"), `import { parse, path, shown } from "./lib.js";
++const parsed = parse('{"x":"a"}');
++export const where: string = parsed.TAG === "Err" ? shown(path(parsed._0)) : "";
++`);
++  expect(typeChecked(dir, "use.ts", checking)).toEqual([]);
++  writeFileSync(join(dir, "wrong.ts"), `import { shown } from "./lib.js";
++shown(["x"]);
++`);
++  expect(typeChecked(dir, "wrong.ts", checking)).toEqual([
++    expect.stringContaining("error TS2741: Property '[jsonPath]' is missing in type 'string[]' but required in type 'JsonPath'"),
++  ]);
++  const lib = await import(join(dir, "lib.js"));
++  const failed = lib.parse('{"x":"a"}');
++  expect(lib.shown(lib.path(failed._0))).toBe("x");
++});
+-- 
+2.55.0
+

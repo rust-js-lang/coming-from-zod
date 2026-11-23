@@ -21,6 +21,9 @@ inputs, so you can see where they agree and where they don't.
 4. [`.extend` is a field, flattened](chapters/04-extend-is-flatten/README.md):
    a user has a base, and flatten makes it one object, in the JSON and in
    the JavaScript, where Rust's `&user.base` is TypeScript's `user`.
+5. [An issue has a path](chapters/05-issues-have-a-path/README.md): zod
+   says `items.1.qty`; serde_path_to_error says `items[1].qty`, the same
+   place, though serde stops at the first problem.
 
 ## Run it
 

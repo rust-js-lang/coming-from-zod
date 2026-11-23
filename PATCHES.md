@@ -9,9 +9,11 @@ as a patch in [patches/](patches/), open an issue upstream, and list both here.
 is upstream, the submodule moves to a commit that has it, and the patch and
 its row go.
 
-None open.
+| Patch | Gap | Chapter | Upstream issue |
+|---|---|---|---|
+| [0004-serde-path-to-error](patches/0004-serde-path-to-error.patch) | **Refused.** `serde_path_to_error`, Rust's usual way to say where in a value a read failed, `items[1].qty`, was refused at `serde_json::Deserializer::from_str`, and rust-js's JSON reader kept no path. The patch is the PR: the crate is one rust-js knows, its reader keeps the path by the crate's own rules, checked against native serde_path_to_error. | [5](chapters/05-issues-have-a-path/README.md) | [rust-js#2379](https://github.com/rust-js-lang/rust-js/issues/2379), PR [#2380](https://github.com/rust-js-lang/rust-js/pull/2380) |
 
-Pinned: `f173c6b0d` (rust-js `main`, 2026-11-23).
+Pinned: `72e6447de` (rust-js `main`, 2026-11-23), the commit 0004 is made on.
 
 ## Landed upstream
 
