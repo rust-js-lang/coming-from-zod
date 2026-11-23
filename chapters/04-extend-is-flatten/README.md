@@ -174,9 +174,10 @@ of chapter 3's. serde's reader built a flattened user nested,
 of the compiled code reads it flat, so `user.base.id` read `undefined`,
 and printing a user threw an error where native Rust prints it.
 
-We patched our copy (`patches/0003-serde-reads-a-flattened-struct-flat.patch`)
-and filed [rust-js#2364](https://github.com/rust-js-lang/rust-js/issues/2364).
-This chapter's test is the check: without the patch, `read._0` isn't
+We patched our copy, filed
+[rust-js#2364](https://github.com/rust-js-lang/rust-js/issues/2364), and
+the fix landed in rust-js (`b4bc51f88`). This chapter's test is the
+check: without the fix, `read._0` isn't
 `parsed.data` for any record it takes. See [PATCHES.md](../../PATCHES.md).
 
 ## Try it

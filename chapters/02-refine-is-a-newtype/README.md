@@ -104,16 +104,16 @@ The private field shows up in the types TypeScript sees. `Email` isn't a
 
 ```ts
 // rust/src/lib.d.ts (generated)
-declare const emailBrand: unique symbol;
+declare const $emailBrand: unique symbol;
 
 export interface Email {
-    readonly [emailBrand]: never;
+    readonly [$emailBrand]: never;
 }
 
 export function welcome(name: Name, email: Email): string;
 ```
 
-`emailBrand` is a `unique symbol` that's declared but never exported, so
+`$emailBrand` is a `unique symbol` that's declared but never exported, so
 no code outside can write an object with that key. In TypeScript:
 
 ```ts

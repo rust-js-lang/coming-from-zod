@@ -199,9 +199,14 @@ serde was built with `TAG` even when `#[rust_js::tag = "type"]` asked for
 `type`. The `match` in `area` then found no `type`, took the wrong branch,
 and a circle's area came out `NaN`, where native Rust says `12.57`.
 
-We patched our copy (`patches/0002-serde-reads-a-tagged-enum-by-its-own-tag.patch`)
-and filed [rust-js#2360](https://github.com/rust-js-lang/rust-js/issues/2360).
-This chapter's test is the check: without the patch, `rust._0` isn't
+We patched our copy, filed
+[rust-js#2360](https://github.com/rust-js-lang/rust-js/issues/2360), and
+the fix landed in rust-js
+([#2361](https://github.com/rust-js-lang/rust-js/pull/2361)). rust-js's
+guide now explains the two attributes too, serde's for the JSON and
+rust-js's for the JS object
+([#2362](https://github.com/rust-js-lang/rust-js/issues/2362)). This
+chapter's test is the check: without the fix, `rust._0` isn't
 `zod.data` for any shape it takes. See [PATCHES.md](../../PATCHES.md).
 
 ## Try it
