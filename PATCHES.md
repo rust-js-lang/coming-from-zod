@@ -11,7 +11,7 @@ its row go.
 
 None open.
 
-Pinned: `d2b0d8242` (rust-js `main`, 2026-11-23).
+Pinned: `1c13c914e` (rust-js `main`, 2026-11-23).
 
 ## Landed upstream
 
