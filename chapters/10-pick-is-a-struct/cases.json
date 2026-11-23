@@ -1,0 +1,11 @@
+[
+  {"kind":"new","text":"{\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"a new user: no id, admin left out","zod":null,"rust":null,"user":"{\"id\":\"u9\",\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":false}","public":"{\"id\":\"u9\",\"name\":\"Ada\"}"},
+  {"kind":"new","text":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":true}","why":"a new admin","zod":null,"rust":null,"user":"{\"id\":\"u9\",\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":true}","public":"{\"id\":\"u9\",\"name\":\"Ada\"}"},
+  {"kind":"new","text":"{\"id\":\"u7\",\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"a new user that brings its own id","zod":[": Unrecognized key: \"id\""],"rust":"unknown field `id`, expected one of `name`, `email`, `admin` at line 1 column 5","user":null,"public":null},
+  {"kind":"new","text":"{\"name\":\"Ada\"}","why":"a new user with no email","zod":["email: Invalid input: expected string, received undefined"],"rust":"missing field `email` at line 1 column 14","user":null,"public":null},
+  {"kind":"patch","text":"{\"name\":\"Countess\"}","why":"a patch of the name alone","zod":null,"rust":null,"user":"{\"id\":\"u1\",\"name\":\"Countess\",\"email\":\"ada@example.com\",\"admin\":false}","public":"{\"id\":\"u1\",\"name\":\"Countess\"}"},
+  {"kind":"patch","text":"{}","why":"an empty patch: nothing changes","zod":null,"rust":null,"user":"{\"id\":\"u1\",\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":false}","public":"{\"id\":\"u1\",\"name\":\"Ada\"}"},
+  {"kind":"patch","text":"{\"email\":\"lovelace@example.com\",\"admin\":true}","why":"a patch of two fields","zod":null,"rust":null,"user":"{\"id\":\"u1\",\"name\":\"Ada\",\"email\":\"lovelace@example.com\",\"admin\":true}","public":"{\"id\":\"u1\",\"name\":\"Ada\"}"},
+  {"kind":"patch","text":"{\"id\":\"u2\"}","why":"a patch of the id, which can't change","zod":[": Unrecognized key: \"id\""],"rust":"unknown field `id`, expected one of `name`, `email`, `admin` at line 1 column 5","user":null,"public":null},
+  {"kind":"patch","text":"{\"name\":null}","why":"a patch that sets the name to null","zod":["name: Invalid input: expected string, received null"],"rust":null,"user":"{\"id\":\"u1\",\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":false}","public":"{\"id\":\"u1\",\"name\":\"Ada\"}"}
+]

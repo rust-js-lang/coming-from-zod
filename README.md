@@ -36,6 +36,9 @@ inputs, so you can see where they agree and where they don't.
 9. [`.transform` and `z.coerce` are readers](chapters/09-transform-is-a-reader/README.md):
    the struct is what you keep, and what may come in is the code that
    reads each field: `try_from` and `deserialize_with`.
+10. [`.pick`, `.omit` and `.partial` are structs of their own](chapters/10-pick-is-a-struct/README.md):
+   each shape written out, `deny_unknown_fields` for `.strict()`, and the
+   compiler holding the code between them to every field.
 
 ## Run it
 
