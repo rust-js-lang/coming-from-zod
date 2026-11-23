@@ -18,6 +18,9 @@ inputs, so you can see where they agree and where they don't.
 3. [A discriminated union is an enum](chapters/03-discriminated-union/README.md):
    the same union, the same JavaScript objects, and a `match` that can't
    forget a kind.
+4. [`.extend` is a field, flattened](chapters/04-extend-is-flatten/README.md):
+   a user has a base, and flatten makes it one object, in the JSON and in
+   the JavaScript, where Rust's `&user.base` is TypeScript's `user`.
 
 ## Run it
 

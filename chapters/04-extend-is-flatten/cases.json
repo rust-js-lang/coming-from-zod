@@ -1,0 +1,9 @@
+[
+  {"kind":"user","text":"{\"id\":\"u1\",\"createdAt\":\"2026-11-23\",\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"a user","zod":null,"rust":null},
+  {"kind":"post","text":"{\"id\":\"p1\",\"createdAt\":\"2026-11-24\",\"title\":\"Hello\",\"authorId\":\"u1\"}","why":"a post","zod":null,"rust":null},
+  {"kind":"user","text":"{\"id\":\"u1\",\"createdAt\":\"2026-11-23\",\"name\":\"Ada\",\"email\":\"ada@example.com\",\"admin\":true}","why":"an unknown key: both drop it","zod":null,"rust":null},
+  {"kind":"user","text":"{\"id\":\"u1\",\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"no createdAt, a base field","zod":["Invalid input: expected string, received undefined"],"rust":"missing field `createdAt` at line 1 column 50"},
+  {"kind":"user","text":"{\"id\":\"u1\",\"createdAt\":\"2026-11-23\",\"email\":\"ada@example.com\"}","why":"no name, a user field","zod":["Invalid input: expected string, received undefined"],"rust":"missing field `name` at line 1 column 62"},
+  {"kind":"user","text":"{\"id\":7,\"createdAt\":\"2026-11-23\",\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"an id that's a number","zod":["Invalid input: expected string, received number"],"rust":"invalid type: integer `7`, expected a string at line 1 column 72"},
+  {"kind":"user","text":"{\"id\":\"p1\",\"createdAt\":\"2026-11-24\",\"title\":\"Hello\",\"authorId\":\"u1\"}","why":"a post read as a user","zod":["Invalid input: expected string, received undefined","Invalid input: expected string, received undefined"],"rust":"missing field `name` at line 1 column 68"}
+]
