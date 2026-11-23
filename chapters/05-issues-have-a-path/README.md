@@ -163,12 +163,12 @@ rust-js refused serde_path_to_error when this chapter was written: its
 reader didn't keep a path, and serde_json's `Deserializer::from_str` was
 refused. We filed
 [rust-js#2379](https://github.com/rust-js-lang/rust-js/issues/2379) and
-sent the change,
-[rust-js#2380](https://github.com/rust-js-lang/rust-js/pull/2380), which
-keeps the path in rust-js's reader by the crate's own rules, checked
-against native serde_path_to_error. Until it lands, we carry it as
-`patches/0004-serde-path-to-error.patch`. This chapter's test is the
-check: without the patch, rust-js refuses `parse_order`. See
+sent the change, which keeps the path in rust-js's reader by the crate's
+own rules, checked against native serde_path_to_error. It landed as
+[rust-js#2380](https://github.com/rust-js-lang/rust-js/pull/2380)
+([ADR 1188](https://github.com/rust-js-lang/rust-js/blob/main/docs/decisions/1188-serde-path-to-error-is-a-shipped-crate.md)).
+This chapter's test is the check: without it, rust-js refuses
+`parse_order`. See
 [PATCHES.md](../../PATCHES.md).
 
 ## Try it

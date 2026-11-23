@@ -1,0 +1,9 @@
+[
+  {"text":"{\"name\":\"Ada\",\"nickname\":\"Countess\",\"bio\":\"Writes programs\",\"theme\":\"dark\",\"newsletter\":true}","why":"everything given","zod":null,"rust":null,"greeting":"Hi, Countess! (dark theme)"},
+  {"text":"{\"name\":\"Ada\",\"bio\":null}","why":"only what must be there: the rest left out","zod":null,"rust":null,"greeting":"Hi, Ada! (light theme)"},
+  {"text":"{\"name\":\"Ada\",\"nickname\":null,\"bio\":null}","why":"a nickname that's null","zod":null,"rust":null,"greeting":"Hi, Ada! (light theme)"},
+  {"text":"{\"name\":\"Ada\"}","why":"no bio: it must be there, even as null","zod":["bio: Invalid input: expected string, received undefined"],"rust":"missing field `bio` at line 1 column 14","greeting":null},
+  {"text":"{\"name\":\"Ada\",\"bio\":null,\"theme\":null}","why":"a theme that's null: a default is for left out, not null","zod":["theme: Invalid input: expected string, received null"],"rust":"invalid type: null, expected a string at line 1 column 37","greeting":null},
+  {"text":"{\"name\":\"Ada\",\"bio\":null,\"newsletter\":\"yes\"}","why":"a newsletter that's text","zod":["newsletter: Invalid input: expected boolean, received string"],"rust":"invalid type: string \"yes\", expected a boolean at line 1 column 43","greeting":null},
+  {"text":"{\"bio\":null}","why":"no name","zod":["name: Invalid input: expected string, received undefined"],"rust":"missing field `name` at line 1 column 12","greeting":null}
+]

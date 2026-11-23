@@ -24,6 +24,9 @@ inputs, so you can see where they agree and where they don't.
 5. [An issue has a path](chapters/05-issues-have-a-path/README.md): zod
    says `items.1.qty`; serde_path_to_error says `items[1].qty`, the same
    place, though serde stops at the first problem.
+6. [Optional, nullable, default](chapters/06-optional-and-default/README.md):
+   zod's three kinds of "maybe nothing" are Rust's one `Option`, and serde
+   says where it may be left out; rust-js's `None` is `undefined`.
 
 ## Run it
 
