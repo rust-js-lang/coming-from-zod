@@ -1,0 +1,9 @@
+[
+  {"text":"{\"name\":\"Ada\",\"role\":\"admin\"}","why":"an admin","zod":null,"rust":null},
+  {"text":"{\"name\":\"Grace\",\"role\":\"editor\"}","why":"an editor","zod":null,"rust":null},
+  {"text":"{\"name\":\"Alan\",\"role\":\"viewer\"}","why":"a viewer","zod":null,"rust":null},
+  {"text":"{\"name\":\"Ada\",\"role\":\"Admin\"}","why":"a role in the wrong case","zod":["role: Invalid option: expected one of \"viewer\"|\"editor\"|\"admin\""],"rust":"unknown variant `Admin`, expected one of `viewer`, `editor`, `admin` at line 1 column 28"},
+  {"text":"{\"name\":\"Ada\",\"role\":\"owner\"}","why":"a role that isn't one","zod":["role: Invalid option: expected one of \"viewer\"|\"editor\"|\"admin\""],"rust":"unknown variant `owner`, expected one of `viewer`, `editor`, `admin` at line 1 column 28"},
+  {"text":"{\"name\":\"Ada\",\"role\":2}","why":"a role that's a number","zod":["role: Invalid option: expected one of \"viewer\"|\"editor\"|\"admin\""],"rust":"expected value at line 1 column 22"},
+  {"text":"{\"name\":\"Ada\"}","why":"no role","zod":["role: Invalid option: expected one of \"viewer\"|\"editor\"|\"admin\""],"rust":"missing field `role` at line 1 column 14"}
+]

@@ -27,6 +27,9 @@ inputs, so you can see where they agree and where they don't.
 6. [Optional, nullable, default](chapters/06-optional-and-default/README.md):
    zod's three kinds of "maybe nothing" are Rust's one `Option`, and serde
    says where it may be left out; rust-js's `None` is `undefined`.
+7. [`z.enum` is an enum](chapters/07-enum-is-an-enum/README.md): a
+   fieldless enum is zod's string union, in the JSON, the JavaScript and
+   the types, and its variants' order is one Rust compares by.
 
 ## Run it
 
