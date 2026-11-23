@@ -1,0 +1,11 @@
+[
+  {"text":"{\"email\":\"Ada@Example.com\",\"age\":36,\"tags\":\"rust, zod\"}","why":"as a program sends it","zod":null,"rust":null,"welcome":"ada@example.com (36), tagged rust + zod"},
+  {"text":"{\"email\":\"  ADA@example.com \",\"age\":\"36\",\"tags\":\"rust, zod,,js \"}","why":"as a form sends it: padded, an age as text, a stray comma","zod":null,"rust":null,"welcome":"ada@example.com (36), tagged rust + zod + js"},
+  {"text":"{\"email\":\"ada@example.com\",\"age\":\" 13 \",\"tags\":\"\"}","why":"just old enough, no tags","zod":null,"rust":null,"welcome":"ada@example.com (13), tagged "},
+  {"text":"{\"email\":\"ada@example.com\",\"age\":\"12\",\"tags\":\"\"}","why":"too young","zod":["age: Too small: expected number to be >=13"],"rust":"too young: 12 at line 1 column 37","welcome":null},
+  {"text":"{\"email\":\"ada@example.com\",\"age\":\"thirty\",\"tags\":\"\"}","why":"an age that isn't a number","zod":["age: Invalid input: expected number, received NaN"],"rust":"not a whole number: \"thirty\" at line 1 column 41","welcome":null},
+  {"text":"{\"email\":\"ada@example.com\",\"age\":true,\"tags\":\"\"}","why":"an age that is true","zod":["age: Too small: expected number to be >=13"],"rust":"data did not match any variant of untagged enum NumberOrText at line 1 column 37","welcome":null},
+  {"text":"{\"email\":\"ada.example.com\",\"age\":36,\"tags\":\"\"}","why":"an email with no @","zod":["email: Invalid email address"],"rust":"not an email: \"ada.example.com\" at line 1 column 26","welcome":null},
+  {"text":"{\"email\":\"ada@example.com\",\"age\":36,\"tags\":[\"rust\"]}","why":"tags already a list","zod":["tags: Invalid input: expected string, received array"],"rust":"invalid type: sequence, expected a string at line 1 column 43","welcome":null},
+  {"text":"{\"email\":\"ada@example.com\",\"tags\":\"rust\"}","why":"no age","zod":["age: Invalid input: expected number, received NaN"],"rust":"missing field `age` at line 1 column 41","welcome":null}
+]

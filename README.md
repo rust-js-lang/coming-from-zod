@@ -33,6 +33,9 @@ inputs, so you can see where they agree and where they don't.
 8. [`z.union` is `#[serde(untagged)]`](chapters/08-union-is-untagged/README.md):
    each shape tried in turn, the first that fits taken, `number | string`
    in the types and the values, and serde's error the weakest yet.
+9. [`.transform` and `z.coerce` are readers](chapters/09-transform-is-a-reader/README.md):
+   the struct is what you keep, and what may come in is the code that
+   reads each field: `try_from` and `deserialize_with`.
 
 ## Run it
 
