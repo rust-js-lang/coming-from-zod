@@ -48,7 +48,7 @@ coming-from-zod/
 │   └── compare.ts, .test.ts     both, side by side
 ├── chapters/02-refine-is-a-newtype/
 │   └── types.check.ts           what TypeScript lets through, checked by tsc
-├── patches/                     our changes to rust-js, applied by `bun run rust`
+├── patches/                     our changes to rust-js, while any wait upstream
 ├── scripts/patch-rust-js.ts     applies them, once
 └── PATCHES.md                   why each patch exists, and its upstream issue
 ```
