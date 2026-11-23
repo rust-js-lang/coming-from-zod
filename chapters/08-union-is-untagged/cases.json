@@ -1,0 +1,10 @@
+[
+  {"text":"{\"id\":42,\"contact\":{\"email\":\"ada@example.com\"}}","why":"a number id, reached by email","zod":null,"rust":null,"said":"#42: write to ada@example.com"},
+  {"text":"{\"id\":\"u-7\",\"contact\":{\"phone\":\"555-0100\",\"ext\":\"12\"}}","why":"a text id, reached by phone","zod":null,"rust":null,"said":"u-7: call 555-0100, ext. 12"},
+  {"text":"{\"id\":\"u-7\",\"contact\":{\"phone\":\"555-0100\"}}","why":"a phone with no extension","zod":null,"rust":null,"said":"u-7: call 555-0100"},
+  {"text":"{\"id\":1,\"contact\":{\"email\":\"ada@example.com\",\"phone\":\"555-0100\"}}","why":"a contact with both: the first that fits wins","zod":null,"rust":null,"said":"#1: write to ada@example.com"},
+  {"text":"{\"id\":-1,\"contact\":{\"email\":\"ada@example.com\"}}","why":"an id that's neither: a number below 0","zod":["id: Too small: expected number to be >=0"],"rust":"data did not match any variant of untagged enum Id at line 1 column 8","said":null},
+  {"text":"{\"id\":true,\"contact\":{\"email\":\"ada@example.com\"}}","why":"an id that's neither: true","zod":["id: Invalid input"],"rust":"data did not match any variant of untagged enum Id at line 1 column 10","said":null},
+  {"text":"{\"id\":1,\"contact\":{\"fax\":\"555-0199\"}}","why":"a contact that's neither","zod":["contact: Invalid input"],"rust":"data did not match any variant of untagged enum Contact at line 1 column 37","said":null},
+  {"text":"{\"id\":1,\"contact\":{\"email\":7}}","why":"an email that's a number","zod":["contact: Invalid input"],"rust":"data did not match any variant of untagged enum Contact at line 1 column 30","said":null}
+]

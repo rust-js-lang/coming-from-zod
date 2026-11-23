@@ -30,6 +30,9 @@ inputs, so you can see where they agree and where they don't.
 7. [`z.enum` is an enum](chapters/07-enum-is-an-enum/README.md): a
    fieldless enum is zod's string union, in the JSON, the JavaScript and
    the types, and its variants' order is one Rust compares by.
+8. [`z.union` is `#[serde(untagged)]`](chapters/08-union-is-untagged/README.md):
+   each shape tried in turn, the first that fits taken, `number | string`
+   in the types and the values, and serde's error the weakest yet.
 
 ## Run it
 
