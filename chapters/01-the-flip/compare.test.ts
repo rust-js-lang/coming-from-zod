@@ -11,10 +11,7 @@ for (const { text, why, rust: refusal } of cases) {
     const zod = User.safeParse(JSON.parse(text))
     const compiled = rust(text)
     expect(zod.success).toBe(refusal === null)
-    if (refusal === null) {
-      expect(compiled).toEqual({ TAG: 'Ok', _0: zod.data })
-    } else {
-      expect(compiled).toEqual({ TAG: 'Err', _0: refusal })
-    }
+    expect(compiled.TAG === 'Ok' ? null : compiled._0).toEqual(refusal)
+    if (zod.success) expect(compiled).toEqual({ TAG: 'Ok', _0: zod.data })
   })
 }

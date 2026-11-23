@@ -1,0 +1,10 @@
+[
+  {"text":"{\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"a sign-up","zod":null,"rust":null},
+  {"text":"{\"name\":\"Ada\",\"email\":\"ada.example.com\"}","why":"the email has no @","zod":["an email has an @"],"rust":"an email has an @ at line 1 column 40"},
+  {"text":"{\"name\":\"Ada\",\"email\":\"ada@@example.com\"}","why":"the email has two @s","zod":["an email has one @, with text on each side"],"rust":"an email has one @, with text on each side at line 1 column 41"},
+  {"text":"{\"name\":\"Ada\",\"email\":\"@example.com\"}","why":"nothing before the @","zod":["an email has one @, with text on each side"],"rust":"an email has one @, with text on each side at line 1 column 37"},
+  {"text":"{\"name\":\"Ada\",\"email\":\"ada @example.com\"}","why":"the email has a space","zod":["an email has no spaces"],"rust":"an email has no spaces at line 1 column 41"},
+  {"text":"{\"name\":\"   \",\"email\":\"ada@example.com\"}","why":"the name is blank","zod":["a name isn't blank"],"rust":"a name isn't blank at line 1 column 13"},
+  {"text":"{\"name\":\"\",\"email\":\"ada.example.com\"}","why":"both are wrong","zod":["a name isn't blank","an email has an @"],"rust":"a name isn't blank at line 1 column 10"},
+  {"text":"{\"name\":\"Ada\",\"email\":7}","why":"the email isn't text","zod":["Invalid input: expected string, received number"],"rust":"invalid type: integer `7`, expected a string at line 1 column 23"}
+]

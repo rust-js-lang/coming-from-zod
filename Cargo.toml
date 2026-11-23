@@ -1,7 +1,7 @@
 # coming-from-zod: one crate per chapter, each compiled to JavaScript by
 # rust-js and compared, input by input, with the same schema in zod.
 [workspace]
-members = ["chapters/01-the-flip/rust"]
+members = ["chapters/01-the-flip/rust", "chapters/02-refine-is-a-newtype/rust"]
 # The pinned rust-js checkout, a submodule: not a member of this workspace.
 exclude = ["rust-js"]
 resolver = "3"

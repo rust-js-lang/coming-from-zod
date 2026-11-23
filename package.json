@@ -3,11 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "rust": "bun rust-js/tooling/cli.js build",
-    "test": "bun test chapters && cargo test --workspace"
+    "rust": "bun scripts/patch-rust-js.ts && bun rust-js/tooling/cli.js build",
+    "types": "tsc -p .",
+    "test": "tsc -p . && bun test chapters && cargo test --workspace"
   },
   "dependencies": {
     "@rust-js/std": "file:rust-js/std",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.5",
+    "typescript": "7.0.2"
   }
 }
