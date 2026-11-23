@@ -1,0 +1,11 @@
+[
+  {"text":"{\"type\":\"circle\",\"radius\":2}","why":"a circle","zod":null,"rust":null},
+  {"text":"{\"type\":\"square\",\"side\":3}","why":"a square","zod":null,"rust":null},
+  {"text":"{\"type\":\"rectangle\",\"width\":2,\"height\":5}","why":"a rectangle","zod":null,"rust":null},
+  {"text":"{\"type\":\"square\",\"side\":3,\"color\":\"red\"}","why":"an unknown key: both drop it","zod":null,"rust":null},
+  {"text":"{\"type\":\"triangle\",\"base\":3}","why":"a type that isn't one of them","zod":["Invalid discriminator value. Expected 'circle' | 'square' | 'rectangle'"],"rust":"unknown variant `triangle`, expected one of `circle`, `square`, `rectangle` at line 1 column 18"},
+  {"text":"{\"radius\":2}","why":"no type","zod":["Invalid discriminator value. Expected 'circle' | 'square' | 'rectangle'"],"rust":"missing field `type` at line 1 column 12"},
+  {"text":"{\"type\":\"Circle\",\"radius\":2}","why":"the type in the wrong case","zod":["Invalid discriminator value. Expected 'circle' | 'square' | 'rectangle'"],"rust":"unknown variant `Circle`, expected one of `circle`, `square`, `rectangle` at line 1 column 16"},
+  {"text":"{\"type\":\"circle\",\"side\":2}","why":"a circle without its radius","zod":["Invalid input: expected number, received undefined"],"rust":"missing field `radius`"},
+  {"text":"{\"type\":\"circle\",\"radius\":\"2\"}","why":"a radius that's text","zod":["Invalid input: expected number, received string"],"rust":"invalid type: string \"2\", expected f64"}
+]

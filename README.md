@@ -15,6 +15,9 @@ inputs, so you can see where they agree and where they don't.
 2. [`.refine` is a newtype](chapters/02-refine-is-a-newtype/README.md): a
    refinement zod forgets once it has run, Rust keeps as a type only the
    check can make.
+3. [A discriminated union is an enum](chapters/03-discriminated-union/README.md):
+   the same union, the same JavaScript objects, and a `match` that can't
+   forget a kind.
 
 ## Run it
 
@@ -48,6 +51,8 @@ coming-from-zod/
 │   └── compare.ts, .test.ts     both, side by side
 ├── chapters/02-refine-is-a-newtype/
 │   └── types.check.ts           what TypeScript lets through, checked by tsc
+├── chapters/03-discriminated-union/
+│   └── rust/src/lib.rs          a `compile_fail` doc test: Rust refuses a `match` missing a kind
 ├── patches/                     our changes to rust-js, while any wait upstream
 ├── scripts/patch-rust-js.ts     applies them, once
 └── PATCHES.md                   why each patch exists, and its upstream issue
