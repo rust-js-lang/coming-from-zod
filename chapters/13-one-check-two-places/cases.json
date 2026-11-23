@@ -1,0 +1,8 @@
+[
+  {"body":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":36}","why":"a signup","status":201,"rust":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":36}","zodStatus":201,"zod":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":36}"},
+  {"body":"{\"name\":\"  Ada \",\"email\":\"ada@example.com\",\"age\":36}","why":"a name with spaces around it","status":201,"rust":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":36}","zodStatus":201,"zod":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":36}"},
+  {"body":"{\"name\":\" \",\"email\":\"ada\",\"age\":12}","why":"every rule broken","status":422,"rust":"{\"error\":\"name: required | email: not an email address | age: must be 13 or older\"}","zodStatus":422,"zod":"{\"error\":\"name: required | email: not an email address | age: must be 13 or older\"}"},
+  {"body":"{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"age\":\"36\"}","why":"an age that's text","status":422,"rust":"{\"error\":\"invalid type: string \\\"36\\\", expected u32 at line 1 column 50\"}","zodStatus":422,"zod":"{\"error\":\"age: Invalid input: expected number, received string\"}"},
+  {"body":"{\"name\":\"Ada\",\"email\":\"ada@example.com\"}","why":"no age","status":422,"rust":"{\"error\":\"missing field `age` at line 1 column 40\"}","zodStatus":422,"zod":"{\"error\":\"age: Invalid input: expected number, received undefined\"}"},
+  {"body":"{\"name\":","why":"a body that isn't JSON","status":422,"rust":"{\"error\":\"EOF while parsing a value at line 1 column 8\"}","zodStatus":422,"zod":"{\"error\":\"JSON Parse error: Unexpected EOF\"}"}
+]
