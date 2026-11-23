@@ -51,6 +51,9 @@ inputs, so you can see where they agree and where they don't.
 14. [TypeScript callers](chapters/14-typescript-callers/README.md): what
    a crate's `.d.ts` promises, what `tsc` checks, and why only a reader
    checks a number's range: check at the edge, trust inside.
+15. [Recursion, and where zod wins](chapters/15-recursion-and-where-zod-wins/README.md):
+   a type that holds itself, serde's recursion limit, an honest list of
+   what zod does better, and a map of the whole guide.
 
 ## Run it
 
@@ -86,6 +89,8 @@ coming-from-zod/
 │   └── types.check.ts           what TypeScript lets through, checked by tsc
 ├── chapters/03-discriminated-union/
 │   └── rust/src/lib.rs          a `compile_fail` doc test: Rust refuses a `match` missing a kind
+├── chapters/13-one-check-two-places/
+│   └── rust/examples/server.rs  the same crate as a native HTTP server, which the test POSTs to
 ├── patches/                     our changes to rust-js, while any wait upstream
 ├── scripts/patch-rust-js.ts     applies them, once
 └── PATCHES.md                   why each patch exists, and its upstream issue

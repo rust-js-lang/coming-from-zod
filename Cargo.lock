@@ -116,6 +116,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chapter-15-recursion-and-where-zod-wins"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
